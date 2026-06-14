@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0B1A2F">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>DDD · גלאי אקוסטי — אב-טיפוס</title>
+<style>
+  :root{
+    --navy:#0B1A2F; --navy2:#0F2845; --panel:#11233D; --line:#1E3A5C;
+    --ink:#E6EEF7; --muted:#7E96B2; --amber:#F08A24; --amber2:#C2410C;
+    --good:#34D399; --grid:#16304E;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;background:
+    radial-gradient(1200px 600px at 50% -10%, #143055 0%, var(--navy) 55%) fixed;
+    color:var(--ink);font-family:'Trebuchet MS','Segoe UI',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  body{min-height:100vh;padding:14px 14px calc(20px + env(safe-area-inset-bottom));max-width:760px;margin:0 auto;}
+  .mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;}
+
+  header{display:flex;align-items:center;gap:11px;padding-bottom:10px;border-bottom:1px solid var(--line);}
+  .logo{flex:0 0 auto;width:42px;height:42px;}
+  h1{font-size:18px;margin:0;letter-spacing:.5px;font-weight:800;}
+  h1 small{display:block;font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:2.5px;margin-top:1px;}
+
+  .disclaimer{margin:11px 0;background:rgba(240,138,36,.10);border:1px solid rgba(240,138,36,.4);
+    border-radius:10px;padding:9px 12px;font-size:12px;line-height:1.5;color:#FAD9B4;}
+  .disclaimer b{color:var(--amber);}
+
+  /* status hero */
+  .hero{position:relative;margin:12px 0;background:var(--panel);border:1px solid var(--line);
+    border-radius:16px;padding:16px;overflow:hidden;}
+  .statewrap{display:flex;align-items:center;gap:14px;}
+  .pulse{flex:0 0 auto;width:64px;height:64px;border-radius:50%;position:relative;display:grid;place-items:center;
+    border:2px solid var(--line);transition:border-color .3s, box-shadow .3s;}
+  .pulse .dot{width:13px;height:13px;border-radius:50%;background:var(--muted);transition:background .3s;}
+  .pulse.listening{border-color:var(--good);box-shadow:0 0 0 0 rgba(52,211,153,.4);animation:ring 1.8s infinite;}
+  .pulse.listening .dot{background:var(--good);}
+  .pulse.alert{border-color:var(--amber);box-shadow:0 0 22px rgba(240,138,36,.5);animation:ringA .9s infinite;}
+  .pulse.alert .dot{background:var(--amber);}
+  @keyframes ring{0%{box-shadow:0 0 0 0 rgba(52,211,153,.35)}70%{box-shadow:0 0 0 16px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+  @keyframes ringA{0%{box-shadow:0 0 0 0 rgba(240,138,36,.5)}70%{box-shadow:0 0 0 14px rgba(240,138,36,0)}100%{box-shadow:0 0 0 0 rgba(240,138,36,0)}}
+  .stateText{flex:1;min-width:0;}
+  .stateText .big{font-size:20px;font-weight:800;letter-spacing:.3px;}
+  .stateText .sub{font-size:12px;color:var(--muted);margin-top:2px;}
+  .stateText.alert .big{color:var(--amber);}
+
+  .readouts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px;}
+  .ro{background:var(--navy2);border:1px solid var(--line);border-radius:10px;padding:8px 6px;text-align:center;}
+  .ro .v{font-size:17px;font-weight:700;}
+  .ro .k{font-size:9.5px;color:var(--muted);letter-spacing:.6px;margin-top:2px;}
+
+  /* harmonic score bar */
+  .scorebar{margin-top:12px;}
+  .scorebar .lbl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px;}
+  .track{height:9px;background:var(--navy);border:1px solid var(--line);border-radius:6px;overflow:hidden;}
+  .fill{height:100%;width:0%;background:linear-gradient(90deg,var(--good),var(--amber));transition:width .12s linear;}
+  .thresh{position:relative;height:0;}
+  .thumb{position:absolute;top:-13px;width:2px;height:15px;background:#fff;opacity:.55;}
+
+  /* spectrogram */
+  .specwrap{margin:12px 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px;}
+  .specwrap .cap{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:6px;}
+  canvas{width:100%;height:190px;display:block;border-radius:8px;background:#06101F;}
+
+  /* controls */
+  .btnrow{display:flex;gap:10px;margin:12px 0;}
+  button{flex:1;font-family:inherit;font-weight:700;font-size:15px;padding:14px;border-radius:12px;border:none;cursor:pointer;}
+  .start{background:var(--good);color:#06231A;}
+  .stop{background:var(--amber2);color:#fff;}
+  .ghost{background:var(--navy2);color:var(--ink);border:1px solid var(--line);font-size:13px;font-weight:600;flex:0 0 auto;padding:14px 16px;}
+  button:disabled{opacity:.4;}
+
+  details{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin:12px 0;}
+  summary{padding:12px 14px;font-weight:700;font-size:14px;cursor:pointer;list-style:none;}
+  summary::-webkit-details-marker{display:none;}
+  summary::before{content:"⚙ ";color:var(--muted);}
+  .ctl{padding:0 14px 14px;}
+  .ctl label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;}
+  .ctl input[type=range]{width:100%;accent-color:var(--amber);}
+  .ctl .val{color:var(--ink);font-weight:700;}
+  .ctl .hint{font-size:11px;color:var(--muted);line-height:1.5;margin-top:6px;}
+
+  .logwrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:12px 0;}
+  .logwrap .lh{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .logwrap .lh b{font-size:14px;}
+  .logwrap .lh button{flex:0 0 auto;padding:7px 12px;font-size:12px;}
+  #log{max-height:200px;overflow:auto;font-size:12px;}
+  #log .row{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--grid);}
+  #log .row .t{color:var(--muted);}
+  #log .empty{color:var(--muted);text-align:center;padding:14px 0;font-size:12px;}
+
+  footer{font-size:11px;color:var(--muted);text-align:center;margin-top:16px;line-height:1.6;}
+  .err{background:rgba(194,65,12,.18);border:1px solid var(--amber2);color:#FAD9B4;padding:10px 12px;border-radius:10px;font-size:12.5px;margin:10px 0;display:none;}
+</style>
+</head>
+<body>
+
+<header>
+  <svg class="logo" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <circle cx="24" cy="24" r="22" fill="none" stroke="#1E3A5C" stroke-width="1.5"/>
+    <circle cx="24" cy="24" r="14" fill="none" stroke="#1E3A5C" stroke-width="1"/>
+    <circle cx="24" cy="24" r="6" fill="none" stroke="#1E3A5C" stroke-width="1"/>
+    <path d="M24 24 L24 2 A22 22 0 0 1 43 13 Z" fill="#F08A24" opacity="0.18"/>
+    <line x1="24" y1="24" x2="24" y2="3" stroke="#F08A24" stroke-width="1.5"/>
+    <circle cx="37" cy="11" r="2.3" fill="#F08A24"/>
+  </svg>
+  <h1>גלאי רחפנים אקוסטי<small>DDD · ACOUSTIC SENSOR NODE · PROTOTYPE</small></h1>
+</header>
+
+<div class="disclaimer">
+  <b>אב-טיפוס מחקרי בלבד.</b> זהו כלי לבדיקה ולאיסוף נתונים — <b>לא</b> מערכת התרעה מאומתת. אין להסתמך עליו להגנה בפועל. הוא מזהה חתימה הרמונית מתמשכת (כמו פרופלור), ועלול להגיב גם למקורות הרמוניים אחרים עד שיכויל על דאטה אמיתי.
+</div>
+
+<div class="err" id="err"></div>
+
+<div class="hero">
+  <div class="statewrap">
+    <div class="pulse" id="pulse"><div class="dot"></div></div>
+    <div class="stateText" id="stateText">
+      <div class="big" id="bigState">לא פעיל</div>
+      <div class="sub" id="subState">לחץ "התחל האזנה" כדי להפעיל את המיקרופון</div>
+    </div>
+  </div>
+
+  <div class="readouts">
+    <div class="ro"><div class="v mono" id="roF0">—</div><div class="k">תדר יסוד (Hz)</div></div>
+    <div class="ro"><div class="v mono" id="roScore">—</div><div class="k">ציון הרמוני (dB)</div></div>
+    <div class="ro"><div class="v mono" id="roCount">0</div><div class="k">זיהויים היום</div></div>
+  </div>
+
+  <div class="scorebar">
+    <div class="lbl"><span>עוצמת חתימה הרמונית</span><span class="mono" id="scorePct">0%</span></div>
+    <div class="track"><div class="fill" id="fill"></div></div>
+    <div class="thresh"><div class="thumb" id="thumb"></div></div>
+  </div>
+</div>
+
+<div class="specwrap">
+  <div class="cap"><span>ספקטרוגרמה חיה <span class="mono">(0–4 kHz)</span></span><span id="specHint">ממתין…</span></div>
+  <canvas id="spec" width="700" height="190"></canvas>
+</div>
+
+<div class="btnrow">
+  <button class="start" id="btnStart">▶ התחל האזנה</button>
+  <button class="stop" id="btnStop" disabled>■ עצור</button>
+</div>
+
+<details>
+  <summary>כיול ורגישות</summary>
+  <div class="ctl">
+    <label>סף זיהוי (רגישות) · <span class="val mono" id="vThresh">10</span> dB
+      <span class="hint">נמוך = רגיש יותר (יותר זיהויים, יותר התרעות שווא). גבוה = שמרני יותר.</span></label>
+    <input type="range" id="sThresh" min="4" max="24" step="1" value="10">
+
+    <label>זמן ולידציה (התמדה) · <span class="val mono" id="vPersist">1.2</span> שנ'
+      <span class="hint">כמה זמן החתימה צריכה להתמיד ברציפות לפני הכרזת זיהוי (§4.4).</span></label>
+    <input type="range" id="sPersist" min="0.4" max="4" step="0.1" value="1.2">
+
+    <label>טווח תדר יסוד · <span class="val mono" id="vBand">90–320</span> Hz
+      <span class="hint">תחום ה-Blade-Pass הצפוי. רחפנים קטנים נוטים לתחום זה.</span></label>
+    <input type="range" id="sFmin" min="60" max="220" step="5" value="90">
+    <input type="range" id="sFmax" min="220" max="600" step="10" value="320">
+    <div class="hint">טיפ: לבדיקה אמיתית — הטס רחפן בקרבת המכשיר, או נגן הקלטת רחפן. שים לב: ביטול עיבוד-רעש של המיקרופון מובנה בקוד כדי לא "לחנוק" את חתימת הרחפן.</div>
+  </div>
+</details>
+
+<div class="logwrap">
+  <div class="lh"><b>יומן זיהויים</b><button class="ghost" id="btnCsv">⤓ ייצוא CSV</button></div>
+  <div id="log"><div class="empty">אין עדיין זיהויים. היומן נשמר עד לרענון הדף — ייצא ל-CSV כדי לשמור נתוני בדיקה.</div></div>
+</div>
+
+<footer>
+  הצומת האקוסטי הראשון של רשת DDD · עיבוד מקומי במכשיר בלבד · האודיו אינו נשמר ואינו נשלח לשום מקום.<br>
+  לגישת מיקרופון בנייד נדרש חיבור מאובטח (HTTPS) — ראה הוראות הרצה.
+</footer>
+
+<script>
+(() => {
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const errBox = $("err");
+  const showErr = m => { errBox.style.display="block"; errBox.textContent = m; };
+
+  // ---- audio + detection state ----
+  let actx=null, analyser=null, srcNode=null, stream=null, raf=null;
+  let running=false;
+  let freqDb=null;            // Float32Array of dB spectrum
+  let binHz=0;
+  let lastTs=0;
+  let persistAcc=0;           // seconds the signature has persisted
+  let f0Hist=[];              // recent fundamentals for stability check
+  let activeDetection=false;  // currently inside a detection event
+  let curEventPeak=0, curEventF0=0, curEventStart=0;
+  let detections=[];          // {time, f0, peak, dur}
+  let dayCount=0;
+  const DEVICE=((self.crypto&&crypto.randomUUID)?crypto.randomUUID():String(Math.random())).slice(0,8); // ephemeral, No-PII
+
+  // ---- params (from UI) ----
+  let TH=10, PERSIST=1.2, FMIN=90, FMAX=320;
+
+  // ---- spectrogram ----
+  const cv=$("spec"), g=cv.getContext("2d");
+  const SPEC_MAX_HZ=4000;
+  function color(v){ // v 0..1 -> navy->amber colormap
+    v=Math.max(0,Math.min(1,v));
+    const stops=[[6,16,31],[15,60,90],[20,110,120],[240,138,36],[255,225,180]];
+    const x=v*(stops.length-1), i=Math.floor(x), f=x-i;
+    const a=stops[i], b=stops[Math.min(i+1,stops.length-1)];
+    return `rgb(${a[0]+(b[0]-a[0])*f|0},${a[1]+(b[1]-a[1])*f|0},${a[2]+(b[2]-a[2])*f|0})`;
+  }
+
+  function setState(mode){ // idle | listening | alert
+    const p=$("pulse"), st=$("stateText"), big=$("bigState"), sub=$("subState");
+    p.className="pulse"+(mode==="listening"?" listening":mode==="alert"?" alert":"");
+    st.className="stateText"+(mode==="alert"?" alert":"");
+    if(mode==="idle"){ big.textContent="לא פעיל"; sub.textContent='לחץ "התחל האזנה" כדי להפעיל את המיקרופון'; }
+    else if(mode==="listening"){ big.textContent="מאזין…"; sub.textContent="סורק חתימות הרמוניות במרחב האקוסטי"; }
+    else { big.textContent="⚠ חתימת רחפן מזוהה"; sub.textContent="חתימה הרמונית מתמשכת — נדרש אימות"; }
+  }
+
+  async function start(){
+    errBox.style.display="none";
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      showErr("הדפדפן אינו תומך בגישת מיקרופון, או שאין חיבור מאובטח (HTTPS). פתח דרך כתובת https.");
+      return;
+    }
+    try{
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:1 }
+      });
+    }catch(e){
+      showErr("גישת המיקרופון נדחתה או נכשלה. בנייד נדרש HTTPS ואישור הרשאה. ("+e.name+")");
+      return;
+    }
+    actx = new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state==="suspended") await actx.resume();
+    srcNode = actx.createMediaStreamSource(stream);
+    analyser = actx.createAnalyser();
+    analyser.fftSize = 16384;            // ~2.9 Hz bins @48k
+    analyser.smoothingTimeConstant = 0.4;
+    srcNode.connect(analyser);
+    binHz = actx.sampleRate / analyser.fftSize;
+    freqDb = new Float32Array(analyser.frequencyBinCount);
+
+    running=true; persistAcc=0; f0Hist=[]; activeDetection=false; lastTs=performance.now();
+    $("btnStart").disabled=true; $("btnStop").disabled=false;
+    setState("listening"); $("specHint").textContent="פעיל";
+    loop();
+  }
+
+  function stop(){
+    running=false;
+    if(raf) cancelAnimationFrame(raf);
+    if(srcNode) srcNode.disconnect();
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+    if(actx) actx.close();
+    actx=analyser=srcNode=stream=null;
+    $("btnStart").disabled=false; $("btnStop").disabled=true;
+    setState("idle"); $("specHint").textContent="נעצר";
+    $("roF0").textContent="—"; $("roScore").textContent="—"; $("fill").style.width="0%"; $("scorePct").textContent="0%";
+  }
+
+  // Harmonic detection via log-domain Harmonic Product Spectrum + harmonicity above noise floor
+  function analyzeFrame(){
+    analyser.getFloatFrequencyData(freqDb);          // dB values (negative)
+    const N=freqDb.length;
+    const iMin=Math.max(2,Math.floor(FMIN/binHz));
+    const iMax=Math.min(N-1,Math.floor(FMAX/binHz));
+
+    // band noise floor (median dB across 0..SPEC_MAX_HZ band)
+    const topBin=Math.min(N-1,Math.floor(SPEC_MAX_HZ/binHz));
+    let sum=0,cnt=0;
+    for(let i=2;i<=topBin;i++){ if(isFinite(freqDb[i])){ sum+=freqDb[i]; cnt++; } }
+    const noiseFloor = cnt?sum/cnt:-120;
+
+    // HPS in log domain: align harmonics 1..5
+    let bestI=-1,bestHps=-1e9;
+    for(let i=iMin;i<=iMax;i++){
+      let acc=0,ok=true;
+      for(let k=1;k<=5;k++){ const idx=i*k; if(idx>=topBin){ok=false;break;} acc+=freqDb[idx]; }
+      if(ok && acc>bestHps){ bestHps=acc; bestI=i; }
+    }
+    if(bestI<0) return {f0:0,score:0,noiseFloor};
+    const f0=bestI*binHz;
+
+    // harmonicity: mean dB at harmonics minus noise floor
+    let hsum=0,hn=0;
+    for(let k=1;k<=5;k++){ const idx=Math.round(f0*k/binHz); if(idx<topBin){ hsum+=freqDb[idx]; hn++; } }
+    const harmMean = hn?hsum/hn:noiseFloor;
+    const score = harmMean - noiseFloor;        // dB above floor
+    return {f0,score,noiseFloor};
+  }
+
+  function pushDetection(f0,peak,dur){
+    const now=new Date();
+    detections.unshift({time:now, f0:Math.round(f0), peak:peak.toFixed(1), dur:dur.toFixed(1)});
+    dayCount++; $("roCount").textContent=dayCount;
+    try{ fetch("/report",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({f0:Math.round(f0),score:+peak.toFixed(1),dur:+dur.toFixed(1),deviceId:DEVICE})}).catch(()=>{}); }catch(e){}
+    const log=$("log");
+    if(log.querySelector(".empty")) log.innerHTML="";
+    const r=document.createElement("div"); r.className="row";
+    const hh=now.toLocaleTimeString("he-IL");
+    r.innerHTML=`<span>⚠ חתימה · <b class="mono">${Math.round(f0)} Hz</b> · ${peak.toFixed(1)} dB · ${dur.toFixed(1)} שנ'</span><span class="t mono">${hh}</span>`;
+    log.insertBefore(r, log.firstChild);
+  }
+
+  function drawColumn(){
+    // scroll left by 1px, draw newest column on right
+    const w=cv.width,h=cv.height;
+    const img=g.getImageData(1,0,w-1,h);
+    g.putImageData(img,0,0);
+    const topBin=Math.min(freqDb.length-1,Math.floor(SPEC_MAX_HZ/binHz));
+    for(let y=0;y<h;y++){
+      // map y (top=high freq) to bin
+      const frac=1-(y/h);
+      const bin=Math.max(0,Math.min(topBin,Math.floor(frac*topBin)));
+      const db=freqDb[bin];
+      const v=(db+100)/70;            // ~ -100..-30 dB -> 0..1
+      g.fillStyle=color(v);
+      g.fillRect(w-1,y,1,1);
+    }
+  }
+
+  function loop(){
+    if(!running) return;
+    raf=requestAnimationFrame(loop);
+    const now=performance.now();
+    const dt=Math.min(0.1,(now-lastTs)/1000); lastTs=now;
+
+    const {f0,score}=analyzeFrame();
+    drawColumn();
+
+    // readouts
+    const pct=Math.max(0,Math.min(100, (score/24)*100));
+    $("fill").style.width=pct+"%"; $("scorePct").textContent=Math.round(pct)+"%";
+    $("thumb").style.right=(Math.min(100,(TH/24)*100))+"%";
+    if(score>3 && f0>0){ $("roF0").textContent=Math.round(f0); $("roScore").textContent=score.toFixed(1); }
+    else { $("roF0").textContent="—"; $("roScore").textContent=score.toFixed(1); }
+
+    // persistence / stability validation (the §4.4 mechanism)
+    const above = score>=TH && f0>0;
+    if(above){
+      f0Hist.push(f0); if(f0Hist.length>40) f0Hist.shift();
+      const med=[...f0Hist].sort((a,b)=>a-b)[Math.floor(f0Hist.length/2)];
+      const stable = Math.abs(f0-med) <= Math.max(8, med*0.10);   // within 10% or 8Hz
+      if(stable){
+        persistAcc+=dt;
+        if(persistAcc>=PERSIST){
+          if(!activeDetection){ activeDetection=true; curEventStart=now; curEventPeak=score; curEventF0=f0; }
+          curEventPeak=Math.max(curEventPeak,score);
+          setState("alert");
+        }
+      } else { persistAcc=Math.max(0,persistAcc-dt*1.5); }
+    } else {
+      persistAcc=Math.max(0,persistAcc-dt*1.5);
+      if(persistAcc<=0 && activeDetection){
+        const dur=(now-curEventStart)/1000;
+        pushDetection(curEventF0,curEventPeak,dur);
+        activeDetection=false;
+        setState("listening");
+      } else if(!activeDetection){ setState("listening"); }
+    }
+  }
+
+  // ---- controls ----
+  $("btnStart").onclick=start;
+  $("btnStop").onclick=stop;
+  $("sThresh").oninput=e=>{TH=+e.target.value; $("vThresh").textContent=TH;};
+  $("sPersist").oninput=e=>{PERSIST=+e.target.value; $("vPersist").textContent=PERSIST.toFixed(1);};
+  function band(){ if(FMIN>=FMAX){FMAX=FMIN+40; $("sFmax").value=FMAX;} $("vBand").textContent=`${FMIN}–${FMAX}`; }
+  $("sFmin").oninput=e=>{FMIN=+e.target.value; band();};
+  $("sFmax").oninput=e=>{FMAX=+e.target.value; band();};
+
+  $("btnCsv").onclick=()=>{
+    if(!detections.length){ alert("אין זיהויים לייצוא עדיין."); return; }
+    let csv="timestamp,fundamental_hz,peak_score_db,duration_s\n";
+    detections.slice().reverse().forEach(d=>{ csv+=`${d.time.toISOString()},${d.f0},${d.peak},${d.dur}\n`; });
+    const blob=new Blob([csv],{type:"text/csv"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download=`ddd_detections_${new Date().toISOString().slice(0,19).replace(/[:T]/g,"-")}.csv`;
+    a.click(); URL.revokeObjectURL(a.href);
+  };
+
+  window.addEventListener("pagehide", ()=>{ if(running) stop(); });
+})();
+</script>
+<script>if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));}</script>
+</body>
+</html>

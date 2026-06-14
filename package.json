@@ -1,0 +1,9 @@
+{
+  "name": "ddd-sensor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DDD Acoustic Sensor Node + Fusion seed backend",
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "express": "^4.19.2" },
+  "engines": { "node": ">=18" }
+}
