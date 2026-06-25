@@ -150,19 +150,22 @@
 </div>
 
 <div class="specwrap" id="recCard">
-  <div class="cap"><span>⤓ הקלטת WAV גולמי — לבדיקת שילוש (TDOA)</span><span id="recStatus">מוכן</span></div>
+  <div class="cap"><span>⤓ הקלטה מסונכרנת — בדיקת שילוש (TDOA)</span><span id="recStatus">לא מחובר</span></div>
+  <input id="recLabel" placeholder="תווית טלפון: 1 / 2 / 3 / 4" style="width:100%;padding:11px;border-radius:8px;border:1px solid var(--line);background:var(--navy2);color:var(--ink);font-family:inherit;font-size:14px;margin-bottom:8px;">
+  <button class="start" id="btnJoin" style="width:100%;margin-bottom:10px;">🔗 הצטרף לסשן (לחץ פעם אחת בכל טלפון)</button>
+  <div style="border-top:1px solid var(--line);margin:6px 0 10px;"></div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">אדמין (טלפון אחד בלבד):</div>
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-    <input id="recLabel" placeholder="תווית טלפון: 1 / 2 / 3 / 4" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--line);background:var(--navy2);color:var(--ink);font-family:inherit;font-size:14px;">
-    <select id="recDur" style="padding:11px;border-radius:8px;border:1px solid var(--line);background:var(--navy2);color:var(--ink);font-family:inherit;font-size:14px;">
+    <select id="recDur" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--line);background:var(--navy2);color:var(--ink);font-family:inherit;font-size:14px;">
       <option value="30">30 שנ'</option>
       <option value="60" selected>60 שנ'</option>
       <option value="120">120 שנ'</option>
-      <option value="180">180 שנ'</option>
     </select>
+    <button class="stop" id="btnStartAll" style="flex:2;">▶ התחל בכל הטלפונים</button>
   </div>
-  <button class="start" id="btnRec" style="width:100%;">● הקלט והורד WAV</button>
+  <button class="ghost" id="btnStopAll" style="width:100%;">עצור סשן</button>
   <div class="hint" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;">
-    הזן תווית (1/2/3/4), לחץ הקלט, ומחא כף חזק בתחילת ההקלטה (סנכרון). הקובץ יורד אוטומטית. גולמי, ללא עיבוד.
+    1) בכל טלפון: הזן תווית (1/2/3/4) ולחץ "הצטרף".  2) בטלפון אחד לחץ "התחל בכל הטלפונים".  3) כל הטלפונים יתחילו תוך 5 שנ' — <b>מחא כף חזק כשמתחיל</b> (סנכרון מדויק). הקבצים יורדים אוטומטית.
   </div>
 </div>
 
@@ -410,12 +413,13 @@
 </script>
 
 <script>
-/* DDD test recorder: raw WAV capture for TDOA. Independent of the live detector. */
+/* DDD synchronized recorder: raw WAV capture coordinated via /cmd. Independent of the live detector. */
 (() => {
   "use strict";
   const $ = id => document.getElementById(id);
-  const btn=$("btnRec"), st=$("recStatus");
-  let busy=false;
+  const st = $("recStatus");
+  let actx=null, joined=false, busy=false, handled=null;
+
   function encodeWAV(samples, fs){
     const n=samples.length, ab=new ArrayBuffer(44+n*2), v=new DataView(ab);
     const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
@@ -426,40 +430,72 @@
     let o=44; for(let i=0;i<n;i++){ let s=Math.max(-1,Math.min(1,samples[i])); v.setInt16(o,s<0?s*0x8000:s*0x7FFF,true); o+=2; }
     return ab;
   }
-  btn.onclick = async () => {
-    if(busy) return;
-    const label=($("recLabel").value||"phone").trim().replace(/[^A-Za-z0-9_-]/g,"_")||"phone";
-    const dur=parseInt($("recDur").value,10)||60;
-    let stream,actx,src,node,zero;
-    try{
-      stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:1}});
-    }catch(e){ st.textContent="שגיאת מיקרופון (HTTPS+אישור) "+e.name; return; }
-    actx=new (window.AudioContext||window.webkitAudioContext)();
-    if(actx.state==="suspended") await actx.resume();
+
+  async function recordRaw(label, dur, tag){
+    if(busy) return; busy=true;
+    label=(label||"phone").trim().replace(/[^A-Za-z0-9_-]/g,"_")||"phone";
+    let stream;
+    try{ stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:1}}); }
+    catch(e){ st.textContent="שגיאת מיקרופון "+e.name; busy=false; return; }
+    if(actx.state==="suspended"){ try{await actx.resume();}catch(e){} }
     const fs=actx.sampleRate;
-    src=actx.createMediaStreamSource(stream);
-    node=actx.createScriptProcessor(4096,1,1);
-    zero=actx.createGain(); zero.gain.value=0;
+    const src=actx.createMediaStreamSource(stream);
+    const node=actx.createScriptProcessor(4096,1,1);
+    const zero=actx.createGain(); zero.gain.value=0;
     const chunks=[]; let total=0;
     node.onaudioprocess=e=>{ const d=e.inputBuffer.getChannelData(0); chunks.push(new Float32Array(d)); total+=d.length; };
     src.connect(node); node.connect(zero); zero.connect(actx.destination);
-    busy=true; btn.disabled=true;
     const t0=Date.now();
-    const iv=setInterval(()=>{ const left=dur-Math.floor((Date.now()-t0)/1000); st.textContent= left>0 ? ("מקליט… "+left+" שנ' (מחא כף!)") : "מסיים…"; },400);
-    st.textContent="מקליט… מחא כף עכשיו!";
+    st.textContent="● מקליט — מחא כף עכשיו!";
+    const iv=setInterval(()=>{ const left=dur-Math.floor((Date.now()-t0)/1000); st.textContent= left>0 ? ("● מקליט… "+left+"s (מחא כף!)") : "מסיים…"; },400);
     setTimeout(()=>{
       clearInterval(iv);
       try{ node.disconnect(); src.disconnect(); zero.disconnect(); }catch(e){}
-      stream.getTracks().forEach(t=>t.stop()); actx.close();
+      stream.getTracks().forEach(t=>t.stop());
       const buf=new Float32Array(total); let o=0; for(const c of chunks){ buf.set(c,o); o+=c.length; }
       const wav=encodeWAV(buf,fs);
-      const fname="ddd_"+label+"_"+new Date().toISOString().slice(0,19).replace(/[:T]/g,"-")+".wav";
+      const fname="ddd_"+label+"_"+tag+".wav";
       const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([wav],{type:"audio/wav"}));
       a.download=fname; a.click(); URL.revokeObjectURL(a.href);
-      st.textContent="נשמר: "+fname+" · "+fs+"Hz · "+(total/fs).toFixed(0)+"s";
-      busy=false; btn.disabled=false;
+      st.textContent="✓ נשמר: "+fname+" · "+fs+"Hz";
+      busy=false;
     }, dur*1000);
+  }
+
+  async function poll(){
+    if(!joined || busy) return;
+    let data;
+    try{ data=await (await fetch("/cmd",{cache:"no-store"})).json(); }catch(e){ return; }
+    const s=data.session;
+    if(s && s.id!==handled){
+      handled=s.id;                                  // claim so we fire once
+      const delay=Math.max(0, s.startAt - data.now); // ms until shared start
+      st.textContent="סשן התקבל — מתחיל בעוד "+Math.ceil(delay/1000)+" שנ'";
+      setTimeout(()=> recordRaw($("recLabel").value, s.dur, s.id), delay);
+    }
+  }
+
+  $("btnJoin").onclick = async () => {
+    try{
+      actx=new (window.AudioContext||window.webkitAudioContext)();
+      if(actx.state==="suspended") await actx.resume();
+      const s=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:1}});
+      s.getTracks().forEach(t=>t.stop());
+    }catch(e){ st.textContent="צריך אישור מיקרופון: "+e.name; return; }
+    joined=true;
+    $("btnJoin").textContent="✓ מחובר וממתין";
+    $("btnJoin").disabled=true;
+    st.textContent="מחובר — ממתין לפקודת אדמין";
+    setInterval(poll, 1000);
   };
+
+  $("btnStartAll").onclick = async () => {
+    const dur=parseInt($("recDur").value,10)||60;
+    try{ await fetch("/cmd/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({dur})});
+      st.textContent="פקודה נשלחה — כל הטלפונים מתחילים…"; }
+    catch(e){ st.textContent="שגיאת שליחה"; }
+  };
+  $("btnStopAll").onclick = async () => { try{ await fetch("/cmd/stop",{method:"POST"}); }catch(e){} st.textContent="הסשן נעצר"; };
 })();
 </script>
 

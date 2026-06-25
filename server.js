@@ -1,4 +1,5 @@
-// DDD — minimal Fusion-seed backend: serves the sensor PWA and collects detection reports.
+// DDD — Fusion-seed backend: serves the sensor PWA, collects detection reports,
+// and coordinates SYNCHRONIZED multi-phone recording sessions (admin trigger).
 const express = require('express');
 const path = require('path');
 const app = express();
@@ -26,6 +27,21 @@ app.get('/stats', (req, res) => {
     total: reports.length
   });
 });
+
+// ---- synchronized recording session coordination ----
+// Admin sets a session; all phones poll /cmd and start recording together.
+let session = null; // { id, startAt, dur }
+
+app.get('/cmd', (req, res) => res.json({ now: Date.now(), session }));
+
+app.post('/cmd/start', (req, res) => {
+  const dur = Math.min(300, Math.max(5, parseInt((req.body && req.body.dur) || 60, 10)));
+  const lead = 5000; // 5s in the future so every phone can schedule the same start
+  session = { id: Date.now().toString(36), startAt: Date.now() + lead, dur };
+  res.json({ ok: true, session });
+});
+
+app.post('/cmd/stop', (req, res) => { session = null; res.json({ ok: true }); });
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
