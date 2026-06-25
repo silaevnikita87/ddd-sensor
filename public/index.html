@@ -149,6 +149,24 @@
   <button class="stop" id="btnStop" disabled>■ עצור</button>
 </div>
 
+<div class="specwrap" id="recCard">
+  <div class="cap"><span>⤓ הקלטת WAV גולמי — לבדיקת שילוש (TDOA)</span><span id="recStatus">מוכן</span></div>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+    <input id="recLabel" placeholder="תווית טלפון: 1 / 2 / 3 / 4" style="flex:1;padding:11px;border-radius:8px;border:1px solid var(--line);background:var(--navy2);color:var(--ink);font-family:inherit;font-size:14px;">
+    <select id="recDur" style="padding:11px;border-radius:8px;border:1px solid var(--line);background:var(--navy2);color:var(--ink);font-family:inherit;font-size:14px;">
+      <option value="30">30 שנ'</option>
+      <option value="60" selected>60 שנ'</option>
+      <option value="120">120 שנ'</option>
+      <option value="180">180 שנ'</option>
+    </select>
+  </div>
+  <button class="start" id="btnRec" style="width:100%;">● הקלט והורד WAV</button>
+  <div class="hint" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;">
+    הזן תווית (1/2/3/4), לחץ הקלט, ומחא כף חזק בתחילת ההקלטה (סנכרון). הקובץ יורד אוטומטית. גולמי, ללא עיבוד.
+  </div>
+</div>
+
+
 <details>
   <summary>כיול ורגישות</summary>
   <div class="ctl">
@@ -390,6 +408,61 @@
   window.addEventListener("pagehide", ()=>{ if(running) stop(); });
 })();
 </script>
+
+<script>
+/* DDD test recorder: raw WAV capture for TDOA. Independent of the live detector. */
+(() => {
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const btn=$("btnRec"), st=$("recStatus");
+  let busy=false;
+  function encodeWAV(samples, fs){
+    const n=samples.length, ab=new ArrayBuffer(44+n*2), v=new DataView(ab);
+    const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+    ws(0,"RIFF"); v.setUint32(4,36+n*2,true); ws(8,"WAVE"); ws(12,"fmt ");
+    v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+    v.setUint32(24,fs,true); v.setUint32(28,fs*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
+    ws(36,"data"); v.setUint32(40,n*2,true);
+    let o=44; for(let i=0;i<n;i++){ let s=Math.max(-1,Math.min(1,samples[i])); v.setInt16(o,s<0?s*0x8000:s*0x7FFF,true); o+=2; }
+    return ab;
+  }
+  btn.onclick = async () => {
+    if(busy) return;
+    const label=($("recLabel").value||"phone").trim().replace(/[^A-Za-z0-9_-]/g,"_")||"phone";
+    const dur=parseInt($("recDur").value,10)||60;
+    let stream,actx,src,node,zero;
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:1}});
+    }catch(e){ st.textContent="שגיאת מיקרופון (HTTPS+אישור) "+e.name; return; }
+    actx=new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state==="suspended") await actx.resume();
+    const fs=actx.sampleRate;
+    src=actx.createMediaStreamSource(stream);
+    node=actx.createScriptProcessor(4096,1,1);
+    zero=actx.createGain(); zero.gain.value=0;
+    const chunks=[]; let total=0;
+    node.onaudioprocess=e=>{ const d=e.inputBuffer.getChannelData(0); chunks.push(new Float32Array(d)); total+=d.length; };
+    src.connect(node); node.connect(zero); zero.connect(actx.destination);
+    busy=true; btn.disabled=true;
+    const t0=Date.now();
+    const iv=setInterval(()=>{ const left=dur-Math.floor((Date.now()-t0)/1000); st.textContent= left>0 ? ("מקליט… "+left+" שנ' (מחא כף!)") : "מסיים…"; },400);
+    st.textContent="מקליט… מחא כף עכשיו!";
+    setTimeout(()=>{
+      clearInterval(iv);
+      try{ node.disconnect(); src.disconnect(); zero.disconnect(); }catch(e){}
+      stream.getTracks().forEach(t=>t.stop()); actx.close();
+      const buf=new Float32Array(total); let o=0; for(const c of chunks){ buf.set(c,o); o+=c.length; }
+      const wav=encodeWAV(buf,fs);
+      const fname="ddd_"+label+"_"+new Date().toISOString().slice(0,19).replace(/[:T]/g,"-")+".wav";
+      const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([wav],{type:"audio/wav"}));
+      a.download=fname; a.click(); URL.revokeObjectURL(a.href);
+      st.textContent="נשמר: "+fname+" · "+fs+"Hz · "+(total/fs).toFixed(0)+"s";
+      busy=false; btn.disabled=false;
+    }, dur*1000);
+  };
+})();
+</script>
+
 <script>if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));}</script>
 </body>
 </html>
