@@ -11,21 +11,34 @@ app.use(express.static(path.join(__dirname, 'public')));
 const UP = path.join(__dirname, 'uploads');
 try { fs.mkdirSync(UP, { recursive: true }); } catch (e) {}
 
-// ---- detection reports ----
-let reports = [];
+// ---- detection EVENTS (consecutive pings from a device = one event) ----
+let events = [];
+const EVENT_GAP = 4000; // ms; pings within this window extend the same event
 app.post('/report', (req, res) => {
-  const { f0, score, dur, geohash, deviceId } = req.body || {};
-  reports.push({ t: Date.now(), f0, score, dur, geohash: geohash || null, deviceId: deviceId || null });
-  if (reports.length > 50000) reports = reports.slice(-50000);
-  res.json({ ok: true, stored: reports.length });
+  const { f0, score, deviceId } = req.body || {};
+  const now = Date.now();
+  const dev = deviceId || null;
+  let ev = events.find(e => e.deviceId === dev && now - e.last < EVENT_GAP);
+  if (ev) {
+    ev.last = now; ev.count++;
+    ev.f0 = f0; ev.score = Math.max(ev.score, score || 0);
+  } else {
+    ev = { start: now, last: now, f0, score: score || 0, count: 1, deviceId: dev };
+    events.push(ev);
+  }
+  if (events.length > 5000) events = events.slice(-5000);
+  res.json({ ok: true, events: events.length });
 });
-app.get('/reports', (req, res) => res.json(reports.slice(-500)));
+app.get('/reports', (req, res) => res.json(events.slice(-500).map(e => ({
+  t: e.last, start: e.start, f0: e.f0, score: e.score,
+  dur: Math.round((e.last - e.start) / 100) / 10, count: e.count, deviceId: e.deviceId
+}))));
 app.get('/stats', (req, res) => {
   const now = Date.now(), day = 864e5, month = 30 * day;
   res.json({
-    today: reports.filter(r => now - r.t < day).length,
-    month: reports.filter(r => now - r.t < month).length,
-    total: reports.length
+    today: events.filter(e => now - e.start < day).length,
+    month: events.filter(e => now - e.start < month).length,
+    total: events.length
   });
 });
 
