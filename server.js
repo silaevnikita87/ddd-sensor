@@ -8,8 +8,13 @@ const app = express();
 app.use(express.json({ limit: '64kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const UP = path.join(__dirname, 'uploads');
+// Persist uploads on a Railway Volume when attached (RAILWAY_VOLUME_MOUNT_PATH),
+// otherwise fall back to local dir (ephemeral). Files survive redeploys with a volume.
+const STORE = process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
+const UP = path.join(STORE, 'uploads');
 try { fs.mkdirSync(UP, { recursive: true }); } catch (e) {}
+console.log('[DDD] uploads dir:', UP,
+  process.env.RAILWAY_VOLUME_MOUNT_PATH ? '(persistent volume)' : '(EPHEMERAL — add a volume to persist)');
 
 // ---- detection EVENTS (consecutive pings from a device = one event) ----
 let events = [];
@@ -102,9 +107,11 @@ app.get('/files', (req, res) => {
 <style>body{font-family:'Segoe UI',system-ui,sans-serif;background:#0B1A2F;color:#E6EEF7;max-width:700px;margin:0 auto;padding:24px}
 h1{color:#F08A24;font-size:20px}ul{list-style:none;padding:0}li{margin:10px 0;font-size:15px;padding:10px 12px;background:#11233D;border:1px solid #1E3A5C;border-radius:10px;display:flex;justify-content:space-between;align-items:center}
 a{color:#34D399;text-decoration:none}span{color:#7E96B2;font-size:12px}.empty{color:#7E96B2}.r{margin-top:14px}.r a{color:#F08A24}</style></head>
-<body><h1>קבצים שהועלו (${items.length})</h1><ul>${rows || '<li class="empty">אין עדיין קבצים — הרץ סשן הקלטה</li>'}</ul>
-<p class="r"><a href="/files">↻ רענן</a></p>
-<p style="color:#7E96B2;font-size:12px">הקבצים נמחקים בעת פריסה מחדש של השרת. הורד אותם מיד אחרי הסשן.</p></body></html>`);
+<body><h1>קבצים שהועלו (${items.length})</h1>
+<p style="font-size:13px;color:${process.env.RAILWAY_VOLUME_MOUNT_PATH ? '#34D399' : '#EF4444'}">
+${process.env.RAILWAY_VOLUME_MOUNT_PATH ? '🟢 אחסון קבוע (Volume) — הקבצים נשמרים גם אחרי פריסה מחדש' : '🔴 אחסון זמני — הוסף Volume ב-Railway כדי לשמור לאורך זמן'}</p>
+<ul>${rows || '<li class="empty">אין עדיין קבצים — הרץ סשן הקלטה</li>'}</ul>
+<p class="r"><a href="/files">↻ רענן</a></p></body></html>`);
 });
 
 app.get('/health', (req, res) => res.json({ ok: true }));
