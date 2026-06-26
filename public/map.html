@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DDD · מסך התראה חי</title>
+<style>
+  :root{--navy:#0B1A2F;--navy2:#0F2845;--panel:#11233D;--line:#1E3A5C;--ink:#E6EEF7;
+    --muted:#7E96B2;--amber:#F08A24;--green:#34D399;--red:#EF4444;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:radial-gradient(1200px 600px at 50% -10%,#143055,var(--navy) 55%) fixed;
+    color:var(--ink);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;
+    max-width:1000px;margin:0 auto;padding:16px;}
+  .top{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+  .top h1{font-size:20px;font-weight:800;letter-spacing:.5px;}
+  .top .live{margin-inline-start:auto;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--green);animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .banner{border-radius:16px;padding:20px;text-align:center;margin-bottom:16px;
+    border:1px solid var(--line);transition:.4s;background:var(--panel);}
+  .banner h2{font-size:30px;font-weight:900;letter-spacing:1px;}
+  .banner p{font-size:13px;opacity:.85;margin-top:4px;}
+  .b-green{background:linear-gradient(180deg,rgba(52,211,153,.18),var(--panel));border-color:#1d6b4e;}
+  .b-green h2{color:var(--green);}
+  .b-amber{background:linear-gradient(180deg,rgba(240,138,36,.20),var(--panel));border-color:#8a5210;}
+  .b-amber h2{color:var(--amber);}
+  .b-red{background:linear-gradient(180deg,rgba(239,68,68,.25),var(--panel));border-color:#8a1f1f;
+    animation:flash 1s infinite;}
+  .b-red h2{color:var(--red);}
+  @keyframes flash{0%,100%{box-shadow:0 0 0 rgba(239,68,68,0)}50%{box-shadow:0 0 28px rgba(239,68,68,.5)}}
+  .grid{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;}
+  @media(max-width:760px){.grid{grid-template-columns:1fr;}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;}
+  .card h3{font-size:13px;color:var(--amber);margin-bottom:10px;font-weight:700;}
+  svg{width:100%;height:300px;display:block;}
+  .stats{display:flex;gap:10px;margin-top:14px;}
+  .stat{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center;}
+  .stat b{font-size:22px;display:block;}
+  .stat span{font-size:11px;color:var(--muted);}
+  .feed{max-height:300px;overflow:auto;}
+  .row{display:flex;justify-content:space-between;font-size:13px;padding:8px 6px;border-bottom:1px solid var(--line);}
+  .row .dev{color:var(--muted);font-size:11px;}
+  .row.hot{background:rgba(239,68,68,.10);}
+  .empty{color:var(--muted);font-size:12px;text-align:center;padding:20px;}
+</style>
+</head>
+<body>
+  <div class="top">
+    <h1>🦆 DDD · מסך התראה חי</h1>
+    <div class="live"><span class="dot"></span><span id="clock">מתחבר…</span></div>
+  </div>
+
+  <div id="banner" class="banner b-green">
+    <h2 id="b-title">— שקט —</h2>
+    <p id="b-sub">אין זיהויים פעילים</p>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>מפת חיישנים (מהבהב = זיהוי לאחרונה)</h3>
+      <svg id="map" viewBox="0 0 400 300"></svg>
+    </div>
+    <div class="card">
+      <h3>פיד זיהויים חי</h3>
+      <div class="feed" id="feed"><div class="empty">ממתין לנתונים…</div></div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b id="s-active" style="color:var(--amber)">0</b><span>חיישנים פעילים (30 שנ׳)</span></div>
+    <div class="stat"><b id="s-today">0</b><span>זיהויים היום</span></div>
+    <div class="stat"><b id="s-total">0</b><span>סה״כ זיהויים</span></div>
+  </div>
+
+<script>
+const RECENT_MS=30000, COINC_MS=6000;
+let devOrder=[];
+
+function fmtTime(t){const d=new Date(t);return d.toLocaleTimeString('he-IL');}
+
+async function tick(){
+  let reports=[], stats={today:0,total:0};
+  try{
+    reports=await (await fetch('/reports')).json();
+    stats=await (await fetch('/stats')).json();
+    document.getElementById('clock').textContent='חי · '+new Date().toLocaleTimeString('he-IL');
+  }catch(e){ document.getElementById('clock').textContent='שגיאת חיבור'; return; }
+
+  const now=Date.now();
+  const recent=reports.filter(r=>now-r.t<RECENT_MS);
+  const coinc=reports.filter(r=>now-r.t<COINC_MS);
+  const devs=[...new Set(reports.map(r=>r.deviceId||'?'))];
+  devs.forEach(d=>{if(!devOrder.includes(d))devOrder.push(d);});
+  const recentDevs=new Set(recent.map(r=>r.deviceId||'?'));
+  const coincDevs=new Set(coinc.map(r=>r.deviceId||'?'));
+
+  // alert level
+  const banner=document.getElementById('banner');
+  banner.className='banner';
+  if(coincDevs.size>=2){
+    banner.classList.add('b-red');
+    document.getElementById('b-title').textContent='⚠ התראה — מספר חיישנים';
+    document.getElementById('b-sub').textContent=coincDevs.size+' חיישנים זיהו חתימה בו-זמנית (אמון גבוה)';
+  }else if(recentDevs.size>=1){
+    banner.classList.add('b-amber');
+    document.getElementById('b-title').textContent='זיהוי בודד';
+    document.getElementById('b-sub').textContent='חיישן אחד מזהה חתימה — דרוש אימות נוסף';
+  }else{
+    banner.classList.add('b-green');
+    document.getElementById('b-title').textContent='— שקט —';
+    document.getElementById('b-sub').textContent='אין זיהויים פעילים';
+  }
+
+  // sensor map (radial)
+  const svg=document.getElementById('map');
+  const cx=200,cy=150,R=110;
+  let h='<circle cx="200" cy="150" r="'+R+'" fill="none" stroke="#1E3A5C" stroke-width="1"/>'
+       +'<circle cx="200" cy="150" r="'+(R*0.6)+'" fill="none" stroke="#1E3A5C" stroke-width="1"/>'
+       +'<circle cx="200" cy="150" r="4" fill="#7E96B2"/>';
+  const n=Math.max(devOrder.length,1);
+  devOrder.forEach((d,i)=>{
+    const a=-Math.PI/2 + i*2*Math.PI/n;
+    const x=cx+R*Math.cos(a), y=cy+R*Math.sin(a);
+    const hot=recentDevs.has(d), vhot=coincDevs.has(d);
+    const col=vhot?'#EF4444':(hot?'#F08A24':'#34D399');
+    if(hot) h+='<circle cx="'+x+'" cy="'+y+'" r="22" fill="'+col+'" opacity="0.25"><animate attributeName="r" values="14;26;14" dur="1.2s" repeatCount="indefinite"/></circle>';
+    h+='<circle cx="'+x+'" cy="'+y+'" r="12" fill="'+col+'" stroke="#0B1A2F" stroke-width="2"/>';
+    h+='<text x="'+x+'" y="'+(y+28)+'" fill="#7E96B2" font-size="9" text-anchor="middle">'+d.substring(0,4)+'</text>';
+  });
+  svg.innerHTML=h;
+
+  // feed
+  const feed=document.getElementById('feed');
+  if(reports.length===0){feed.innerHTML='<div class="empty">אין עדיין זיהויים</div>';}
+  else{
+    feed.innerHTML=reports.slice(-25).reverse().map(r=>{
+      const hot=now-r.t<COINC_MS;
+      return '<div class="row'+(hot?' hot':'')+'"><span>'+Math.round(r.f0||0)+' Hz · '+(r.score||0)+' dB</span>'
+        +'<span class="dev">'+(r.deviceId||'?').substring(0,6)+' · '+fmtTime(r.t)+'</span></div>';
+    }).join('');
+  }
+
+  document.getElementById('s-active').textContent=recentDevs.size;
+  document.getElementById('s-today').textContent=stats.today||0;
+  document.getElementById('s-total').textContent=stats.total||0;
+}
+tick(); setInterval(tick,2000);
+</script>
+</body>
+</html>
