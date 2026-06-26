@@ -29,6 +29,20 @@ app.get('/stats', (req, res) => {
   });
 });
 
+// ---- sensor heartbeat / online roster ----
+let sensors = {}; // deviceId -> { lastSeen, label }
+app.post('/heartbeat', (req, res) => {
+  const { deviceId, label } = req.body || {};
+  if (deviceId) sensors[deviceId] = { lastSeen: Date.now(), label: label || null };
+  res.json({ ok: true });
+});
+app.get('/sensors', (req, res) => {
+  const now = Date.now();
+  res.json(Object.entries(sensors)
+    .filter(([k, v]) => now - v.lastSeen < 15000)
+    .map(([k, v]) => ({ deviceId: k, label: v.label, lastSeen: v.lastSeen })));
+});
+
 // ---- synchronized recording session ----
 let session = null; // { id, startAt, dur }
 app.get('/cmd', (req, res) => res.json({ now: Date.now(), session }));
