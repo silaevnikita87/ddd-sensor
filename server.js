@@ -13,7 +13,7 @@ try { fs.mkdirSync(UP, { recursive: true }); } catch (e) {}
 
 // ---- detection EVENTS (consecutive pings from a device = one event) ----
 let events = [];
-const EVENT_GAP = 4000; // ms; pings within this window extend the same event
+const EVENT_GAP = 12000; // ms; pings within this window extend the same event
 app.post('/report', (req, res) => {
   const { f0, score, deviceId } = req.body || {};
   const now = Date.now();
