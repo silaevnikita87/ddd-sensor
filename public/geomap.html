@@ -77,6 +77,8 @@ const RECENT_MS=30000, COINC_MS=8000;
 const map=L.map('map',{zoomControl:true}).setView(HOME,16);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(map);
 let markers=[], threat=null, assign={};
+setTimeout(()=>map.invalidateSize(), 300);
+setTimeout(()=>map.invalidateSize(), 1200);
 
 function slotFor(dev,i){ return SLOTS[i % SLOTS.length]; }
 
@@ -115,12 +117,18 @@ async function tick(){
       markers.push(L.circleMarker([lat,lon],{radius:24,color:'#EF4444',weight:1,fillColor:'#EF4444',fillOpacity:.15}).addTo(map)); }
     markers.push(m);
   });
-  // auto-frame: fit to REAL GPS positions; re-fit when the set changes (jitter-tolerant key)
-  const fitPts = realPts.length ? realPts : allPts;
-  if(fitPts.length){
-    const key = fitPts.map(p=>p[0].toFixed(3)+','+p[1].toFixed(3)).sort().join('|');
+  // keep map sized correctly (critical inside the app WebView)
+  map.invalidateSize();
+  // auto-frame: focus on the DETECTION area when active; otherwise show all sensors
+  const framePts = hot.length ? hot : (realPts.length ? realPts : allPts);
+  const tight = hot.length > 0;
+  if(framePts.length){
+    const key = (tight?'H:':'A:') + framePts.map(p=>p[0].toFixed(3)+','+p[1].toFixed(3)).sort().join('|');
     if(key !== window._fitKey){
-      try{ map.fitBounds(fitPts,{padding:[50,50],maxZoom:16}); }catch(e){}
+      try{
+        if(framePts.length===1) map.setView(framePts[0], tight?18:16);
+        else map.fitBounds(framePts,{padding:[60,60],maxZoom: tight?18:16});
+      }catch(e){}
       window._fitKey = key;
     }
   }
