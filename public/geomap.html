@@ -99,13 +99,14 @@ async function tick(){
 
   markers.forEach(m=>map.removeLayer(m)); markers=[];
   if(threat){map.removeLayer(threat);threat=null;}
-  const hot=[]; const allPts=[];
+  const hot=[]; const allPts=[]; const realPts=[];
   online.forEach(d=>{
     const s=sensors.find(x=>x.deviceId===d);
     let lat, lon, real=false;
     if(s && typeof s.lat==='number' && typeof s.lon==='number'){ lat=s.lat; lon=s.lon; real=true; }
     else { const slot=SLOTS[assign[d]%SLOTS.length]; lat=slot.lat; lon=slot.lon; }
     allPts.push([lat,lon]);
+    if(real) realPts.push([lat,lon]);
     const det=coincDevs.has(d), rec=recentDevs.has(d);
     const col=det?'#EF4444':'#34D399';
     const m=L.circleMarker([lat,lon],{radius:det?13:10,color:'#0B1A2F',weight:2,fillColor:col,fillOpacity:.95}).addTo(map);
@@ -114,7 +115,15 @@ async function tick(){
       markers.push(L.circleMarker([lat,lon],{radius:24,color:'#EF4444',weight:1,fillColor:'#EF4444',fillOpacity:.15}).addTo(map)); }
     markers.push(m);
   });
-  if(allPts.length && !window._fitted){ try{ map.fitBounds(allPts,{padding:[40,40],maxZoom:17}); window._fitted=true; }catch(e){} }
+  // auto-frame: fit to REAL GPS positions; re-fit when the set changes (jitter-tolerant key)
+  const fitPts = realPts.length ? realPts : allPts;
+  if(fitPts.length){
+    const key = fitPts.map(p=>p[0].toFixed(3)+','+p[1].toFixed(3)).sort().join('|');
+    if(key !== window._fitKey){
+      try{ map.fitBounds(fitPts,{padding:[50,50],maxZoom:16}); }catch(e){}
+      window._fitKey = key;
+    }
+  }
 
   // banner + threat area
   const b=document.getElementById('banner'); b.className='banner';
