@@ -25,20 +25,42 @@
   .b-red{background:linear-gradient(180deg,rgba(239,68,68,.22),var(--panel));border-color:#8a1f1f;animation:flash 1s infinite;}
   .b-red h2{color:var(--red);}
   @keyframes flash{0%,100%{box-shadow:0 0 0 rgba(239,68,68,0)}50%{box-shadow:0 0 22px rgba(239,68,68,.5)}}
-  #map{height:62vh;border-radius:14px;border:1px solid var(--line);}
+  #map{height:46vh;border-radius:14px;border:1px solid var(--line);}
   .leaflet-popup-content{direction:rtl;}
-  .hint{font-size:11px;color:var(--muted);margin-top:8px;text-align:center;}
+  .hint{font-size:11px;color:var(--muted);margin:8px 0;text-align:center;}
+  .stats{display:flex;gap:8px;margin:10px 0;}
+  .stat{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center;}
+  .stat b{font-size:20px;display:block;}
+  .stat span{font-size:10px;color:var(--muted);}
+  .roster{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px;}
+  .roster .lbl{font-size:13px;font-weight:bold;}
+  .chip{padding:3px 9px;border-radius:20px;font-size:11px;border:1px solid var(--green);background:rgba(52,211,153,.2);}
+  .chip.det{border-color:var(--red);background:rgba(239,68,68,.2);}
+  .feedhdr{font-size:13px;font-weight:bold;color:var(--amber);margin-bottom:6px;}
+  .feed{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px;max-height:200px;overflow:auto;}
+  .row{display:flex;justify-content:space-between;font-size:13px;padding:7px 6px;border-bottom:1px solid var(--line);}
+  .row.hot{background:rgba(239,68,68,.10);}
+  .row .dev{font-size:11px;color:var(--muted);}
+  .empty{color:var(--muted);font-size:12px;text-align:center;padding:14px;}
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="top">
-    <h1>🦆 DDD · מפת מיקום</h1>
+    <h1>🦆 DDD · התראות ומפה</h1>
     <div class="live" id="clock">מתחבר…</div>
   </div>
   <div id="banner" class="banner b-green"><h2 id="b-title">— שקט —</h2><p id="b-sub">אין זיהויים פעילים</p></div>
   <div id="map"></div>
-  <div class="hint">חיישנים: ירוק = מחובר · אדום = מזהה כעת. אזור מוצלל = הערכת מיקור האיום (מרכז החיישנים המזהים).</div>
+  <div class="hint">חיישנים: ירוק = מחובר · אדום = מזהה כעת. אזור מוצלל = הערכת מקור האיום.</div>
+  <div class="stats">
+    <div class="stat"><b id="s-online" style="color:var(--green)">0</b><span>חיישנים מחוברים</span></div>
+    <div class="stat"><b id="s-now" style="color:var(--amber)">0</b><span>מזהים כעת</span></div>
+    <div class="stat"><b id="s-today">0</b><span>זיהויים היום</span></div>
+  </div>
+  <div class="roster"><span class="lbl">🛰 חיישנים:</span><span id="roster-list"></span></div>
+  <div class="feedhdr">פיד זיהויים חי</div>
+  <div class="feed" id="feed"><div class="empty">ממתין לנתונים…</div></div>
 </div>
 
 <script>
@@ -59,10 +81,11 @@ let markers=[], threat=null, assign={};
 function slotFor(dev,i){ return SLOTS[i % SLOTS.length]; }
 
 async function tick(){
-  let reports=[],sensors=[];
+  let reports=[],sensors=[],stats={today:0,total:0};
   try{
     reports=await (await fetch('/reports')).json();
     sensors=await (await fetch('/sensors')).json();
+    stats=await (await fetch('/stats')).json();
     document.getElementById('clock').textContent='חי · '+new Date().toLocaleTimeString('he-IL');
   }catch(e){ document.getElementById('clock').textContent='שגיאת חיבור'; return; }
 
@@ -110,6 +133,32 @@ async function tick(){
     b.classList.add('b-green');
     document.getElementById('b-title').textContent='— שקט —';
     document.getElementById('b-sub').textContent=online.length+' חיישנים מחוברים';
+  }
+
+  // stats
+  document.getElementById('s-online').textContent=online.length;
+  document.getElementById('s-now').textContent=coincDevs.size;
+  document.getElementById('s-today').textContent=stats.today||0;
+
+  // roster chips
+  const rl=document.getElementById('roster-list');
+  rl.innerHTML = online.length===0
+    ? '<span style="font-size:11px;color:var(--muted)">אין גלאים מאזינים</span>'
+    : online.map(d=>{
+        const det=coincDevs.has(d);
+        return '<span class="chip'+(det?' det':'')+'">'+d.substring(0,4)+'</span>';
+      }).join('');
+
+  // live feed
+  const feed=document.getElementById('feed');
+  if(reports.length===0){ feed.innerHTML='<div class="empty">אין עדיין זיהויים</div>'; }
+  else{
+    feed.innerHTML=reports.slice(-25).reverse().map(r=>{
+      const isHot=now-r.t<COINC_MS;
+      const tm=new Date(r.t).toLocaleTimeString('he-IL');
+      return '<div class="row'+(isHot?' hot':'')+'"><span>'+Math.round(r.f0||0)+' Hz · '+(r.score||0)+' dB'
+        +(r.dur?' · '+r.dur+'s':'')+'</span><span class="dev">'+(r.deviceId||'?').substring(0,6)+' · '+tm+'</span></div>';
+    }).join('');
   }
 }
 tick(); setInterval(tick,2000);
