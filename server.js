@@ -74,7 +74,10 @@ let session = null; // { id, startAt, dur }
 app.get('/cmd', (req, res) => res.json({ now: Date.now(), session }));
 app.post('/cmd/start', (req, res) => {
   const dur = Math.min(300, Math.max(5, parseInt((req.body && req.body.dur) || 60, 10)));
-  session = { id: Date.now().toString(36), startAt: Date.now() + 5000, dur };
+  const nm = (req.body && req.body.name)
+    ? String(req.body.name).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 24) : '';
+  const id = (nm ? nm + '-' : '') + Date.now().toString(36).slice(-4);
+  session = { id, startAt: Date.now() + 5000, dur, name: nm };
   res.json({ ok: true, session });
 });
 app.post('/cmd/stop', (req, res) => { session = null; res.json({ ok: true }); });
