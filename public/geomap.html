@@ -76,17 +76,22 @@ async function tick(){
 
   markers.forEach(m=>map.removeLayer(m)); markers=[];
   if(threat){map.removeLayer(threat);threat=null;}
-  const hot=[];
+  const hot=[]; const allPts=[];
   online.forEach(d=>{
-    const slot=SLOTS[assign[d]%SLOTS.length];
+    const s=sensors.find(x=>x.deviceId===d);
+    let lat, lon, real=false;
+    if(s && typeof s.lat==='number' && typeof s.lon==='number'){ lat=s.lat; lon=s.lon; real=true; }
+    else { const slot=SLOTS[assign[d]%SLOTS.length]; lat=slot.lat; lon=slot.lon; }
+    allPts.push([lat,lon]);
     const det=coincDevs.has(d), rec=recentDevs.has(d);
     const col=det?'#EF4444':'#34D399';
-    const m=L.circleMarker([slot.lat,slot.lon],{radius:det?13:10,color:'#0B1A2F',weight:2,fillColor:col,fillOpacity:.95}).addTo(map);
-    m.bindPopup(`<b>${slot.name}</b><br>${d.substring(0,6)}<br>${det?'⚠ מזהה כעת':(rec?'זיהוי לאחרונה':'מחובר, שקט')}`);
-    if(det){ hot.push([slot.lat,slot.lon]);
-      markers.push(L.circleMarker([slot.lat,slot.lon],{radius:24,color:'#EF4444',weight:1,fillColor:'#EF4444',fillOpacity:.15}).addTo(map)); }
+    const m=L.circleMarker([lat,lon],{radius:det?13:10,color:'#0B1A2F',weight:2,fillColor:col,fillOpacity:.95}).addTo(map);
+    m.bindPopup(`<b>${real?'📍 GPS':'מיקום מוגדר'}</b><br>${d.substring(0,6)}<br>${det?'⚠ מזהה כעת':(rec?'זיהוי לאחרונה':'מחובר, שקט')}`);
+    if(det){ hot.push([lat,lon]);
+      markers.push(L.circleMarker([lat,lon],{radius:24,color:'#EF4444',weight:1,fillColor:'#EF4444',fillOpacity:.15}).addTo(map)); }
     markers.push(m);
   });
+  if(allPts.length && !window._fitted){ try{ map.fitBounds(allPts,{padding:[40,40],maxZoom:17}); window._fitted=true; }catch(e){} }
 
   // banner + threat area
   const b=document.getElementById('banner'); b.className='banner';

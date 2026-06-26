@@ -43,17 +43,25 @@ app.get('/stats', (req, res) => {
 });
 
 // ---- sensor heartbeat / online roster ----
-let sensors = {}; // deviceId -> { lastSeen, label }
+let sensors = {}; // deviceId -> { lastSeen, label, lat, lon }
 app.post('/heartbeat', (req, res) => {
-  const { deviceId, label } = req.body || {};
-  if (deviceId) sensors[deviceId] = { lastSeen: Date.now(), label: label || null };
+  const { deviceId, label, lat, lon } = req.body || {};
+  if (deviceId) {
+    const prev = sensors[deviceId] || {};
+    sensors[deviceId] = {
+      lastSeen: Date.now(),
+      label: label || prev.label || null,
+      lat: (typeof lat === 'number') ? lat : (prev.lat ?? null),
+      lon: (typeof lon === 'number') ? lon : (prev.lon ?? null)
+    };
+  }
   res.json({ ok: true });
 });
 app.get('/sensors', (req, res) => {
   const now = Date.now();
   res.json(Object.entries(sensors)
     .filter(([k, v]) => now - v.lastSeen < 15000)
-    .map(([k, v]) => ({ deviceId: k, label: v.label, lastSeen: v.lastSeen })));
+    .map(([k, v]) => ({ deviceId: k, label: v.label, lat: v.lat, lon: v.lon, lastSeen: v.lastSeen })));
 });
 
 // ---- synchronized recording session ----
