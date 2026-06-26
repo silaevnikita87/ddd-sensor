@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DDD · מפת מיקום</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{--navy:#0B1A2F;--panel:#11233D;--line:#1E3A5C;--ink:#E6EEF7;--muted:#7E96B2;
+    --amber:#F08A24;--green:#34D399;--red:#EF4444;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--navy);color:var(--ink);font-family:'Segoe UI',system-ui,sans-serif;}
+  .wrap{max-width:1000px;margin:0 auto;padding:12px;}
+  .top{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .top h1{font-size:18px;font-weight:800;}
+  .top .live{margin-inline-start:auto;font-size:12px;color:var(--muted);}
+  .banner{border-radius:14px;padding:14px;text-align:center;margin-bottom:10px;border:1px solid var(--line);background:var(--panel);transition:.3s;}
+  .banner h2{font-size:22px;font-weight:900;}
+  .banner p{font-size:12px;opacity:.85;margin-top:2px;}
+  .b-green{background:linear-gradient(180deg,rgba(52,211,153,.16),var(--panel));border-color:#1d6b4e;}
+  .b-green h2{color:var(--green);}
+  .b-amber{background:linear-gradient(180deg,rgba(240,138,36,.18),var(--panel));border-color:#8a5210;}
+  .b-amber h2{color:var(--amber);}
+  .b-red{background:linear-gradient(180deg,rgba(239,68,68,.22),var(--panel));border-color:#8a1f1f;animation:flash 1s infinite;}
+  .b-red h2{color:var(--red);}
+  @keyframes flash{0%,100%{box-shadow:0 0 0 rgba(239,68,68,0)}50%{box-shadow:0 0 22px rgba(239,68,68,.5)}}
+  #map{height:62vh;border-radius:14px;border:1px solid var(--line);}
+  .leaflet-popup-content{direction:rtl;}
+  .hint{font-size:11px;color:var(--muted);margin-top:8px;text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>🦆 DDD · מפת מיקום</h1>
+    <div class="live" id="clock">מתחבר…</div>
+  </div>
+  <div id="banner" class="banner b-green"><h2 id="b-title">— שקט —</h2><p id="b-sub">אין זיהויים פעילים</p></div>
+  <div id="map"></div>
+  <div class="hint">חיישנים: ירוק = מחובר · אדום = מזהה כעת. אזור מוצלל = הערכת מיקור האיום (מרכז החיישנים המזהים).</div>
+</div>
+
+<script>
+// ===== CONFIG: set your real sensor positions (lat, lon). Online sensors fill slots in order. =====
+const HOME=[32.7940, 34.9896];            // map center (Haifa)
+const SLOTS=[
+  {lat:32.7948, lon:34.9888, name:"חיישן A"},
+  {lat:32.7932, lon:34.9888, name:"חיישן B"},
+  {lat:32.7940, lon:34.9910, name:"חיישן C"},
+  {lat:32.7940, lon:34.9870, name:"חיישן D"},
+];
+// =================================================================================================
+const RECENT_MS=30000, COINC_MS=8000;
+const map=L.map('map',{zoomControl:true}).setView(HOME,16);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OSM'}).addTo(map);
+let markers=[], threat=null, assign={};
+
+function slotFor(dev,i){ return SLOTS[i % SLOTS.length]; }
+
+async function tick(){
+  let reports=[],sensors=[];
+  try{
+    reports=await (await fetch('/reports')).json();
+    sensors=await (await fetch('/sensors')).json();
+    document.getElementById('clock').textContent='חי · '+new Date().toLocaleTimeString('he-IL');
+  }catch(e){ document.getElementById('clock').textContent='שגיאת חיבור'; return; }
+
+  const now=Date.now();
+  const coincDevs=new Set(reports.filter(r=>now-r.t<COINC_MS).map(r=>r.deviceId||'?'));
+  const recentDevs=new Set(reports.filter(r=>now-r.t<RECENT_MS).map(r=>r.deviceId||'?'));
+
+  // stable slot assignment by sorted online deviceId
+  const online=sensors.map(s=>s.deviceId).sort();
+  online.forEach((d,i)=>{ if(!(d in assign)) assign[d]=Object.keys(assign).length; });
+
+  markers.forEach(m=>map.removeLayer(m)); markers=[];
+  if(threat){map.removeLayer(threat);threat=null;}
+  const hot=[];
+  online.forEach(d=>{
+    const slot=SLOTS[assign[d]%SLOTS.length];
+    const det=coincDevs.has(d), rec=recentDevs.has(d);
+    const col=det?'#EF4444':'#34D399';
+    const m=L.circleMarker([slot.lat,slot.lon],{radius:det?13:10,color:'#0B1A2F',weight:2,fillColor:col,fillOpacity:.95}).addTo(map);
+    m.bindPopup(`<b>${slot.name}</b><br>${d.substring(0,6)}<br>${det?'⚠ מזהה כעת':(rec?'זיהוי לאחרונה':'מחובר, שקט')}`);
+    if(det){ hot.push([slot.lat,slot.lon]);
+      markers.push(L.circleMarker([slot.lat,slot.lon],{radius:24,color:'#EF4444',weight:1,fillColor:'#EF4444',fillOpacity:.15}).addTo(map)); }
+    markers.push(m);
+  });
+
+  // banner + threat area
+  const b=document.getElementById('banner'); b.className='banner';
+  if(coincDevs.size>=2){
+    b.classList.add('b-red');
+    document.getElementById('b-title').textContent='⚠ התראה — מספר חיישנים';
+    document.getElementById('b-sub').textContent=coincDevs.size+' חיישנים מזהים בו-זמנית — הערכת מיקום על המפה';
+    const lat=hot.reduce((a,p)=>a+p[0],0)/hot.length, lon=hot.reduce((a,p)=>a+p[1],0)/hot.length;
+    threat=L.circle([lat,lon],{radius:60,color:'#EF4444',weight:2,fillColor:'#EF4444',fillOpacity:.18,dashArray:'6'}).addTo(map);
+    threat.bindPopup('הערכת אזור מקור האיום');
+  }else if(recentDevs.size>=1){
+    b.classList.add('b-amber');
+    document.getElementById('b-title').textContent='זיהוי בודד';
+    document.getElementById('b-sub').textContent='חיישן אחד מזהה — דרוש אימות נוסף';
+  }else{
+    b.classList.add('b-green');
+    document.getElementById('b-title').textContent='— שקט —';
+    document.getElementById('b-sub').textContent=online.length+' חיישנים מחוברים';
+  }
+}
+tick(); setInterval(tick,2000);
+</script>
+</body>
+</html>
