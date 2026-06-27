@@ -3,6 +3,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const dsp = require('./dsp.js');
 const app = express();
 
 app.use(express.json({ limit: '64kb' }));
@@ -110,7 +111,64 @@ app.post('/cmd/stop', (req, res) => { session = null; res.json({ ok: true }); })
 let live = {};          // label -> [ { seq, t, buf } ]  (last few chunks)
 let liveOn = false;     // a live session is active
 const LIVE_KEEP = 6;    // chunks kept per label
-app.post('/live/start', (req, res) => { live = {}; liveOn = true; res.json({ ok: true }); });
+// field geometry for on-server localization (set via /live/config)
+let liveCfg = {
+  mics: { "1": [0, 0], "2": [15, 0], "3": [7.5, 13] },
+  clapPos: [7.5, 4], origin: [32.7940, 34.9896], bearing: 90,
+  srcT0: 0.4, srcT1: 2.6
+};
+let liveCalib = null, liveProcessed = new Set();
+
+app.post('/live/config', (req, res) => {
+  const b = req.body || {};
+  if (b.mics && typeof b.mics === 'object') liveCfg.mics = b.mics;
+  if (Array.isArray(b.clapPos)) liveCfg.clapPos = b.clapPos;
+  if (Array.isArray(b.origin)) liveCfg.origin = b.origin;
+  if (typeof b.bearing === 'number') liveCfg.bearing = b.bearing;
+  liveCalib = null; liveProcessed = new Set();
+  res.json({ ok: true, cfg: liveCfg });
+});
+app.get('/live/config', (req, res) => res.json(liveCfg));
+
+function liveProcess() {
+  try {
+    const labels = Object.keys(liveCfg.mics);
+    if (!labels.every(l => live[l] && live[l].length)) return;
+    // calibrate once from the clap in seq 0
+    if (liveCalib === null) {
+      if (!labels.every(l => live[l].some(c => c.seq === 0))) return;
+      const calib = {}; let fsr;
+      for (const l of labels) {
+        const w = dsp.parseWav(live[l].find(c => c.seq === 0).buf);
+        if (!w) return; calib[l] = w.samples; fsr = w.fs;
+      }
+      liveCalib = dsp.clockOffsets(labels, liveCfg.mics, liveCfg.clapPos, calib, fsr);
+      console.log('[live] calibrated:', liveCalib.map(o => (1000 * o).toFixed(0) + 'ms').join(', '));
+    }
+    // newest common seq>0 not yet processed
+    let common = null;
+    for (const l of labels) {
+      const s = new Set(live[l].map(c => c.seq));
+      common = common ? new Set([...common].filter(x => s.has(x))) : s;
+    }
+    const cand = [...common].filter(s => s > 0 && !liveProcessed.has(s));
+    if (!cand.length) return;
+    const seq = Math.max(...cand);
+    const src = {}; let fsr;
+    for (const l of labels) {
+      const w = dsp.parseWav(live[l].find(c => c.seq === seq).buf);
+      if (!w) return; src[l] = w.samples; fsr = w.fs;
+    }
+    const est = dsp.localizeSource(labels, liveCfg.mics, src, fsr, liveCalib, liveCfg.srcT0, liveCfg.srcT1);
+    const ll = dsp.toLatLon(est[0], est[1], liveCfg.origin, liveCfg.bearing);
+    fixes.push({ lat: ll[0], lon: ll[1], x: est[0], y: est[1], label: 'live#' + seq, err: null, t: Date.now() });
+    if (fixes.length > 200) fixes = fixes.slice(-200);
+    liveProcessed.add(seq);
+    console.log('[live] seq', seq, '-> (' + est[0].toFixed(1) + ',' + est[1].toFixed(1) + ')');
+  } catch (e) { console.log('[live] err', e.message); }
+}
+
+app.post('/live/start', (req, res) => { live = {}; liveOn = true; liveCalib = null; liveProcessed = new Set(); res.json({ ok: true }); });
 app.post('/live/stop',  (req, res) => { liveOn = false; res.json({ ok: true }); });
 app.get('/live/status', (req, res) => res.json({ on: liveOn }));
 app.post('/live/chunk', express.raw({ type: '*/*', limit: '12mb' }), (req, res) => {
@@ -120,6 +178,7 @@ app.post('/live/chunk', express.raw({ type: '*/*', limit: '12mb' }), (req, res) 
   (live[label] = live[label] || []).push({ seq, t, buf: req.body });
   if (live[label].length > LIVE_KEEP) live[label] = live[label].slice(-LIVE_KEEP);
   res.json({ ok: true, seq });
+  setImmediate(liveProcess);
 });
 app.get('/live/state', (req, res) => {
   res.json(Object.entries(live).map(([label, arr]) => ({

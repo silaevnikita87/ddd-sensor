@@ -56,6 +56,51 @@
     <div class="hint">📁 <a href="/files">צפה בהקלטות שהועלו</a></div>
   </div>
 
+  <div style="margin-top:22px;border-top:1px solid var(--line);padding-top:18px;">
+    <div class="big" style="font-size:17px;font-weight:bold;margin-bottom:4px;">📡 מצב חי (זמן אמת)</div>
+    <div class="hint" style="margin-bottom:10px;">הגדר את הגיאומטריה פעם אחת, התחל סשן, ואז לחץ "מצב חי" בכל הטלפונים. המקור יופיע על המפה אוטומטית — בלי לפטופ.</div>
+    <label>מיקומי מיקרופונים (x,y במטרים)</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+      <input id="m1" value="0,0" placeholder="טלפון 1">
+      <input id="m2" value="15,0" placeholder="טלפון 2">
+      <input id="m3" value="7.5,13" placeholder="טלפון 3">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px;">
+      <div><label>מחיאת כף (x,y)</label><input id="clap" value="7.5,4"></div>
+      <div><label>אזימוט ציר X (מעלות מצפון)</label><input id="bearing" value="90"></div>
+    </div>
+    <label>GPS של טלפון 1 = (0,0)  ·  lat,lon</label>
+    <input id="origin" value="32.7940,34.9896" placeholder="32.7940,34.9896">
+    <button class="start" id="liveBtn" style="margin-top:14px;">💾 שמור הגדרות + התחל סשן חי</button>
+    <button class="stop" id="liveStopBtn">■ עצור סשן חי</button>
+    <div class="status" id="livestatus" style="margin-top:12px;">
+      <div class="big" id="lv-title" style="font-size:15px;">סשן חי לא פעיל</div>
+      <div class="row"><span>מיקומים אחרונים שחושבו</span><b id="lv-fixes">0</b></div>
+      <div class="hint">📍 <a href="/geomap.html">פתח מפה חיה</a></div>
+    </div>
+  </div>
+
+<script>
+function pair(id){ return document.getElementById(id).value.split(',').map(s=>parseFloat(s.trim())); }
+document.getElementById('liveBtn').onclick=async()=>{
+  try{
+    const cfg={ mics:{ "1":pair('m1'), "2":pair('m2'), "3":pair('m3') },
+      clapPos:pair('clap'), origin:pair('origin'), bearing:parseFloat(document.getElementById('bearing').value) };
+    await fetch('/live/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
+    await fetch('/live/start',{method:'POST'});
+    document.getElementById('lv-title').textContent='🟢 סשן חי פעיל — מחאו כף פעם אחת לכיול';
+  }catch(e){ document.getElementById('lv-title').textContent='שגיאת הגדרה'; }
+};
+document.getElementById('liveStopBtn').onclick=async()=>{
+  try{ await fetch('/live/stop',{method:'POST'}); document.getElementById('lv-title').textContent='סשן חי נעצר'; }catch(e){}
+};
+async function pollLive(){
+  try{ const fx=await (await fetch('/fixes')).json();
+    document.getElementById('lv-fixes').textContent=fx.length; }catch(e){}
+}
+setInterval(pollLive,2000); pollLive();
+</script>
+
 <script>
 let dur=60;
 document.querySelectorAll('.dur').forEach(el=>el.onclick=()=>{
