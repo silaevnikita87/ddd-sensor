@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CyberDuck · זיהוי רחפנים אקוסטי מבוזר</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;600;700;800&family=Heebo:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A1727; --bg2:#0E2034; --panel:#102740; --line:#1C3450;
+    --ink:#E9F0F8; --muted:#8197B0; --amber:#F2922A; --green:#36D399;
+    --red:#F0504A; --teal:#3FB6C9;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:'Heebo',system-ui,sans-serif; line-height:1.65;
+    -webkit-font-smoothing:antialiased; overflow-x:hidden;
+  }
+  .mono{font-family:'Space Mono',monospace;}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px;}
+  h1,h2,h3{font-family:'Rubik',sans-serif;line-height:1.12;letter-spacing:-.01em;}
+
+  /* ---------- header ---------- */
+  header{position:sticky;top:0;z-index:40;backdrop-filter:blur(10px);
+    background:rgba(10,23,39,.72);border-bottom:1px solid var(--line);}
+  .nav{display:flex;align-items:center;gap:24px;height:64px;}
+  .brand{display:flex;align-items:center;gap:9px;font-family:'Rubik';font-weight:800;
+    font-size:19px;letter-spacing:.02em;}
+  .brand .dot{width:11px;height:11px;border-radius:50%;background:var(--amber);
+    box-shadow:0 0 0 4px rgba(242,146,42,.18);}
+  .brand small{font-family:'Heebo';font-weight:400;color:var(--muted);font-size:12px;letter-spacing:0;}
+  .nav .links{margin-inline-start:auto;display:flex;gap:26px;font-size:14px;color:var(--muted);}
+  .nav .links a{color:inherit;text-decoration:none;transition:color .2s;}
+  .nav .links a:hover{color:var(--ink);}
+  .btn{font-family:'Rubik';font-weight:600;font-size:14px;padding:10px 18px;border-radius:10px;
+    background:var(--amber);color:#0A1727;text-decoration:none;border:none;cursor:pointer;
+    transition:transform .15s, box-shadow .2s;display:inline-block;}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(242,146,42,.28);}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);}
+  .btn.ghost:hover{border-color:var(--amber);box-shadow:none;}
+
+  /* ---------- hero ---------- */
+  .hero{position:relative;padding:72px 0 40px;overflow:hidden;}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center;}
+  .eyebrow{font-family:'Space Mono';font-size:12.5px;letter-spacing:.22em;color:var(--amber);
+    text-transform:uppercase;margin-bottom:20px;display:flex;align-items:center;gap:10px;}
+  .eyebrow::before{content:"";width:28px;height:1px;background:var(--amber);display:inline-block;}
+  .hero h1{font-size:clamp(34px,5.2vw,58px);font-weight:800;}
+  .hero h1 .hl{color:var(--amber);}
+  .hero p.lead{font-size:clamp(16px,1.9vw,19px);color:#C3D2E4;margin-top:22px;max-width:30em;}
+  .hero .cta{display:flex;gap:14px;margin-top:32px;flex-wrap:wrap;}
+  .hero .stats{display:flex;gap:30px;margin-top:40px;flex-wrap:wrap;}
+  .stat .n{font-family:'Rubik';font-weight:700;font-size:25px;color:var(--ink);}
+  .stat .l{font-size:12.5px;color:var(--muted);}
+
+  /* ---------- signature acoustic viz ---------- */
+  .viz{position:relative;aspect-ratio:1/1;width:100%;}
+  .viz svg{width:100%;height:100%;overflow:visible;}
+  .ring{fill:none;stroke-width:1.2;}
+  .fixline{stroke:var(--amber);stroke-width:1.3;stroke-dasharray:3 4;opacity:.0;}
+  .node circle{fill:var(--bg2);stroke:var(--green);stroke-width:2;}
+  .readout{font-family:'Space Mono';font-size:11px;fill:var(--ink);}
+  .readout .dim{fill:var(--muted);}
+  @media (prefers-reduced-motion: no-preference){
+    .pulse{animation:expand 3.4s ease-out infinite;}
+    .pulse.d1{animation-delay:0s;} .pulse.d2{animation-delay:1.1s;} .pulse.d3{animation-delay:2.2s;}
+    @keyframes expand{0%{r:6;opacity:.85;}80%{opacity:0;}100%{r:120;opacity:0;}}
+    .fixline{animation:draw 3.4s ease-in-out infinite;}
+    @keyframes draw{0%,55%{opacity:0;}70%{opacity:.9;}92%{opacity:.9;}100%{opacity:0;}}
+    .drone{animation:dronep 3.4s ease-in-out infinite;}
+    @keyframes dronep{0%,60%{opacity:0;transform:scale(.4);}72%{opacity:1;transform:scale(1);}95%{opacity:1;}100%{opacity:0;}}
+    .reveal{opacity:0;transform:translateY(18px);transition:opacity .7s, transform .7s;}
+    .reveal.in{opacity:1;transform:none;}
+  }
+
+  /* ---------- sections ---------- */
+  section{padding:74px 0;}
+  .sec-eyebrow{font-family:'Space Mono';font-size:12px;letter-spacing:.2em;color:var(--teal);
+    text-transform:uppercase;margin-bottom:14px;}
+  .sec-title{font-size:clamp(26px,3.6vw,38px);font-weight:700;max-width:18em;}
+  .sec-sub{color:var(--muted);margin-top:14px;max-width:40em;font-size:16px;}
+
+  .problem{background:linear-gradient(180deg,transparent,rgba(240,80,74,.04),transparent);}
+  .pcard{border:1px solid var(--line);border-radius:16px;padding:26px;background:var(--bg2);}
+  .pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:34px;}
+  .pcard h3{font-size:18px;margin-bottom:8px;color:var(--ink);}
+  .pcard p{font-size:14.5px;color:var(--muted);}
+  .pcard .k{font-family:'Space Mono';color:var(--amber);font-size:13px;}
+
+  /* ---------- pipeline ---------- */
+  .pipe{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:42px;position:relative;}
+  .step{border:1px solid var(--line);border-radius:14px;padding:22px 18px;background:var(--panel);
+    position:relative;}
+  .step .num{font-family:'Space Mono';font-size:12px;color:var(--amber);}
+  .step h3{font-size:17px;margin:10px 0 7px;}
+  .step p{font-size:13.5px;color:var(--muted);}
+  .step .ico{width:34px;height:34px;margin-bottom:6px;}
+  .pipe .arrow{position:absolute;top:50%;font-size:20px;color:var(--line);}
+
+  /* ---------- science ---------- */
+  .sci{display:grid;grid-template-columns:1fr 1fr;gap:46px;align-items:center;}
+  .sci .panelbox{border:1px solid var(--line);border-radius:18px;background:var(--bg2);padding:8px;}
+  .formula{font-family:'Space Mono';font-size:15px;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:14px 16px;margin-top:18px;color:#CFE0F0;direction:ltr;text-align:left;}
+  .formula b{color:var(--amber);}
+  .sci ul{list-style:none;margin-top:20px;}
+  .sci li{display:flex;gap:12px;align-items:flex-start;margin:12px 0;font-size:15px;color:#C3D2E4;}
+  .sci li .b{color:var(--green);font-family:'Space Mono';margin-top:3px;}
+
+  /* ---------- capabilities ---------- */
+  .caps{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:38px;}
+  .cap{border:1px solid var(--line);border-radius:14px;padding:22px;background:var(--bg2);
+    display:flex;gap:16px;align-items:flex-start;}
+  .cap .tag{font-family:'Space Mono';font-size:11px;color:var(--green);border:1px solid var(--green);
+    border-radius:20px;padding:2px 9px;white-space:nowrap;}
+  .cap h3{font-size:17px;margin-bottom:6px;}
+  .cap p{font-size:14px;color:var(--muted);}
+
+  /* ---------- roadmap ---------- */
+  .road{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:40px;border:1px solid var(--line);
+    border-radius:16px;overflow:hidden;}
+  .phase{padding:26px;border-inline-start:1px solid var(--line);}
+  .phase:first-child{border-inline-start:none;}
+  .phase .ph{font-family:'Space Mono';font-size:12px;color:var(--teal);}
+  .phase h3{font-size:19px;margin:8px 0;}
+  .phase p{font-size:14px;color:var(--muted);}
+  .phase.now{background:linear-gradient(180deg,rgba(242,146,42,.10),transparent);}
+  .phase.now .ph{color:var(--amber);}
+
+  /* ---------- cta band ---------- */
+  .ctaband{background:linear-gradient(120deg,#0E2034,#10283f);border:1px solid var(--line);
+    border-radius:22px;padding:54px 44px;text-align:center;}
+  .ctaband h2{font-size:clamp(24px,3.4vw,34px);font-weight:700;}
+  .ctaband p{color:var(--muted);margin:14px auto 26px;max-width:34em;}
+
+  footer{border-top:1px solid var(--line);padding:34px 0;margin-top:60px;color:var(--muted);font-size:13px;}
+  .foot{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap;}
+  .disclaimer{font-size:12px;color:#5F7798;}
+  .note{font-size:12.5px;color:var(--muted);background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;padding:10px 14px;margin-top:26px;display:inline-block;}
+
+  @media(max-width:860px){
+    .hero-grid,.sci{grid-template-columns:1fr;}
+    .viz{max-width:420px;margin:0 auto;}
+    .pgrid,.pipe,.caps,.road{grid-template-columns:1fr;}
+    .road{}
+    .phase{border-inline-start:none;border-top:1px solid var(--line);}
+    .phase:first-child{border-top:none;}
+    .nav .links{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="brand"><span class="dot"></span>CyberDuck&nbsp;<small>Drone Detection</small></div>
+    <nav class="links">
+      <a href="#problem">האתגר</a>
+      <a href="#how">איך זה עובד</a>
+      <a href="#science">המדע</a>
+      <a href="#download">הורדה</a>
+      <a href="#roadmap">מפת דרכים</a>
+    </nav>
+    <a href="#contact" class="btn">הצטרפו לפיילוט</a>
+  </div>
+</header>
+
+<!-- ================= HERO ================= -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow">זיהוי רחפנים אקוסטי מבוזר</div>
+      <h1>כל סמארטפון הוא <span class="hl">חיישן אקוסטי</span>.<br>הרשת שומעת את הרחפן.</h1>
+      <p class="lead">רשת מבוזרת של טלפונים רגילים שומעת את חתימת הקול של רחפן, משלשת את מיקומו לפי הפרשי זמן־הגעה, ומתריעה — בזמן אמת, ללא חומרה ייעודית.</p>
+      <div class="cta">
+        <a href="#contact" class="btn">הצטרפו לפיילוט</a>
+        <a href="#how" class="btn ghost">איך זה עובד ↓</a>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="n mono">3+</div><div class="l">טלפונים = מערך שילוש</div></div>
+        <div class="stat"><div class="n mono">~0.34 מ׳</div><div class="l">רזולוציה לכל 1ms סנכרון</div></div>
+        <div class="stat"><div class="n mono">0₪</div><div class="l">עלות חומרה לחיישן</div></div>
+      </div>
+    </div>
+
+    <!-- signature: live acoustic triangulation -->
+    <div class="viz" aria-label="הדגמת שילוש אקוסטי">
+      <svg viewBox="0 0 360 360" role="img">
+        <defs>
+          <radialGradient id="field" cx="50%" cy="46%" r="60%">
+            <stop offset="0%" stop-color="#122C49"/>
+            <stop offset="100%" stop-color="#0A1727"/>
+          </radialGradient>
+        </defs>
+        <circle cx="180" cy="170" r="168" fill="url(#field)"/>
+        <!-- range rings -->
+        <circle class="ring" cx="180" cy="170" r="60" stroke="#1C3450"/>
+        <circle class="ring" cx="180" cy="170" r="110" stroke="#16314e"/>
+        <circle class="ring" cx="180" cy="170" r="158" stroke="#13293f"/>
+        <!-- sensors (triangle) -->
+        <!-- positions: S1(90,250) S2(270,250) S3(180,70) -->
+        <!-- fix point (drone) -->
+        <g class="drone" style="transform-origin:170px 165px;">
+          <line class="fixline" x1="90" y1="250" x2="170" y2="165"/>
+          <line class="fixline" x1="270" y1="250" x2="170" y2="165"/>
+          <line class="fixline" x1="180" y1="70"  x2="170" y2="165"/>
+          <circle cx="170" cy="165" r="7" fill="#F2922A"/>
+          <circle cx="170" cy="165" r="13" fill="none" stroke="#F2922A" stroke-width="1.5" opacity=".5"/>
+        </g>
+        <!-- emanating pulses from each sensor -->
+        <circle class="pulse d1" cx="90"  cy="250" r="6" fill="none" stroke="#36D399" stroke-width="1.4"/>
+        <circle class="pulse d2" cx="270" cy="250" r="6" fill="none" stroke="#36D399" stroke-width="1.4"/>
+        <circle class="pulse d3" cx="180" cy="70"  r="6" fill="none" stroke="#36D399" stroke-width="1.4"/>
+        <!-- sensor nodes -->
+        <g class="node"><circle cx="90"  cy="250" r="9"/></g>
+        <g class="node"><circle cx="270" cy="250" r="9"/></g>
+        <g class="node"><circle cx="180" cy="70"  r="9"/></g>
+        <!-- readout -->
+        <text class="readout" x="186" y="150"><tspan class="dim">FIX </tspan>x 12.4m  y 8.1m</text>
+        <text class="readout" x="186" y="164" fill="#36D399">±0.6m · 3 sensors</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PROBLEM ================= -->
+<section id="problem" class="problem">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="sec-eyebrow">האתגר האזרחי</div>
+      <h2 class="sec-title">רחפנים נכנסים למרחב האזרחי מהר יותר מהיכולת לזהות אותם.</h2>
+      <p class="sec-sub">מערכות גילוי קיימות יקרות, נקודתיות ודורשות חומרה ייעודית. לקהילות, מוסדות ותשתיות אזרחיות אין כלי נגיש להתרעה מוקדמת.</p>
+    </div>
+    <div class="pgrid">
+      <div class="pcard reveal"><div class="k">// עלות</div><h3>חומרה יקרה</h3><p>מכ״ם או חיישנים אקוסטיים ייעודיים עולים עשרות אלפי ש״ח לנקודה.</p></div>
+      <div class="pcard reveal"><div class="k">// כיסוי</div><h3>נקודות בודדות</h3><p>פתרון יחיד מכסה שטח מצומצם; פריסה רחבה אינה כלכלית.</p></div>
+      <div class="pcard reveal"><div class="k">// נגישות</div><h3>לא בהישג יד</h3><p>הגנה היקפית נשארת מחוץ להישג ידם של גופים אזרחיים.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= HOW IT WORKS ================= -->
+<section id="how">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="sec-eyebrow">ארכיטקטורה</div>
+      <h2 class="sec-title">ארבעה שלבים — מצליל למיקום להתרעה.</h2>
+      <p class="sec-sub">כל טלפון ברשת מקליט אודיו גולמי מסונכרן. הענן מצליב את ההקלטות, משלש את המקור, ומפיץ התרעה למפה חיה.</p>
+    </div>
+    <div class="pipe">
+      <div class="step reveal">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#36D399" stroke-width="1.7"><path d="M12 3v18M7 8v8M17 8v8M3 11v2M21 11v2"/></svg>
+        <div class="num">// 01</div><h3>האזנה</h3><p>טלפונים מקליטים אודיו גולמי (ללא עיבוד שמשמיד את אות הרחפן).</p>
+      </div>
+      <div class="step reveal">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#F2922A" stroke-width="1.7"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        <div class="num">// 02</div><h3>סנכרון</h3><p>מחיאת כף משותפת מכיילת את הפרשי השעון בין הטלפונים למילישנייה.</p>
+      </div>
+      <div class="step reveal">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#3FB6C9" stroke-width="1.7"><path d="M12 21l-8-5V8l8-5 8 5v8z"/><path d="M12 3v18"/></svg>
+        <div class="num">// 03</div><h3>שילוש</h3><p>הפרשי זמן־הגעה (TDOA) בין שלושה חיישנים מצמצמים את המקור לנקודה.</p>
+      </div>
+      <div class="step reveal">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#F0504A" stroke-width="1.7"><path d="M12 2l9 16H3z"/><path d="M12 9v4M12 16h.01"/></svg>
+        <div class="num">// 04</div><h3>התרעה</h3><p>זיהוי במספר חיישנים בו־זמנית = אמון גבוה → התרעה ומיקום על מפה חיה.</p>
+      </div>
+    </div>
+    <span class="note">עיקרון מנחה: <b style="color:var(--ink)">לזהות ולהתריע</b> — לא ליירט. כלי קהילתי להתרעה מוקדמת.</span>
+  </div>
+</section>
+
+<!-- ================= SCIENCE ================= -->
+<section id="science" style="background:var(--bg2);">
+  <div class="wrap sci">
+    <div class="reveal">
+      <div class="sec-eyebrow">הפיזיקה</div>
+      <h2 class="sec-title">קול נע באוויר במהירות ידועה. זה כל הסוד.</h2>
+      <p class="sec-sub">כשרחפן משמיע צליל, הוא מגיע לכל חיישן בזמן מעט שונה. הפרש הזמן מקודד את ההפרש במרחק — וקווי ההפרשים נחתכים בדיוק במיקום המקור.</p>
+      <div class="formula">Δt × <b>343 m/s</b> = Δdistance &nbsp;→&nbsp; <b>position</b></div>
+      <ul>
+        <li><span class="b">›</span><span>סנכרון של 1 מילישנייה ⟵ רזולוציה של כ־0.34 מטר.</span></li>
+        <li><span class="b">›</span><span>שלושה חיישנים נותנים מיקום דו־ממדי; חיישן מוגבה מוסיף גובה.</span></li>
+        <li><span class="b">›</span><span>הדיוק הגבוה ביותר כשהמקור בתוך מערך החיישנים או סמוך לו.</span></li>
+      </ul>
+    </div>
+    <div class="panelbox reveal">
+      <svg viewBox="0 0 360 320" style="width:100%;display:block;">
+        <rect width="360" height="320" rx="14" fill="#0A1727"/>
+        <!-- hyperbolic-ish TDOA illustration -->
+        <g stroke="#16314e" fill="none" stroke-width="1">
+          <circle cx="80" cy="240" r="40"/><circle cx="80" cy="240" r="80"/><circle cx="80" cy="240" r="120"/>
+        </g>
+        <g stroke="#13293f" fill="none" stroke-width="1">
+          <circle cx="280" cy="240" r="55"/><circle cx="280" cy="240" r="95"/><circle cx="280" cy="240" r="135"/>
+        </g>
+        <!-- sensors -->
+        <circle cx="80" cy="240" r="8" fill="#0E2034" stroke="#36D399" stroke-width="2"/>
+        <circle cx="280" cy="240" r="8" fill="#0E2034" stroke="#36D399" stroke-width="2"/>
+        <circle cx="180" cy="90" r="8" fill="#0E2034" stroke="#36D399" stroke-width="2"/>
+        <text x="64" y="266" class="readout dim">S1</text>
+        <text x="264" y="266" class="readout dim">S2</text>
+        <text x="166" y="80" class="readout dim">S3</text>
+        <!-- source -->
+        <line x1="80" y1="240" x2="172" y2="150" stroke="#F2922A" stroke-width="1.2" stroke-dasharray="3 4"/>
+        <line x1="280" y1="240" x2="172" y2="150" stroke="#F2922A" stroke-width="1.2" stroke-dasharray="3 4"/>
+        <line x1="180" y1="90" x2="172" y2="150" stroke="#F2922A" stroke-width="1.2" stroke-dasharray="3 4"/>
+        <circle cx="172" cy="150" r="7" fill="#F2922A"/>
+        <text x="184" y="146" class="readout">source</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CAPABILITIES ================= -->
+<section id="caps">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="sec-eyebrow">מה כבר עובד</div>
+      <h2 class="sec-title">אב־טיפוס חי, מאומת בשטח על מספר טלפונים.</h2>
+    </div>
+    <div class="caps">
+      <div class="cap reveal"><span class="tag">פעיל</span><div><h3>הקלטה מסונכרנת</h3><p>אפליקציה ילידית שמקליטה אודיו גולמי מסונכרן ומעלה אוטומטית לענן.</p></div></div>
+      <div class="cap reveal"><span class="tag">פעיל</span><div><h3>מנוע שילוש TDOA</h3><p>אומת בסימולציה ועל הקלטות אמיתיות — דיוק תת־מטרי בתוך המערך.</p></div></div>
+      <div class="cap reveal"><span class="tag">פעיל</span><div><h3>מסך התראה חי</h3><p>התראה רב־חיישנית בזמן אמת, רשימת חיישנים מחוברים, ופיד זיהויים.</p></div></div>
+      <div class="cap reveal"><span class="tag">פעיל</span><div><h3>מפה גאוגרפית</h3><p>חיישנים במיקום GPS אמיתי ואזור איום משוער — מתמקדת אוטומטית על הזיהוי.</p></div></div>
+    </div>
+    <span class="note">שלב נוכחי: <b style="color:var(--ink)">פיילוט ואימות</b>. כיוונון ביצועי הגלאי מול נתוני רחפן אמיתיים הוא תחום הפיתוח הפעיל.</span>
+  </div>
+</section>
+
+<!-- ================= ROADMAP ================= -->
+<section id="roadmap" style="background:var(--bg2);">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="sec-eyebrow">מפת דרכים</div>
+      <h2 class="sec-title">מהמעבדה לקהילה למרחב הלאומי.</h2>
+    </div>
+    <div class="road">
+      <div class="phase now reveal"><div class="ph">// עכשיו</div><h3>אקדמיה</h3><p>אימות מדעי ושיתוף מחקרי — הוכחת היתכנות וביצועים.</p></div>
+      <div class="phase reveal"><div class="ph">// הבא</div><h3>פיילוטים אזרחיים</h3><p>פריסה בקהילות ומוסדות — התרעה מוקדמת בעלות נמוכה.</p></div>
+      <div class="phase reveal"><div class="ph">// אופק</div><h3>מרחב לאומי</h3><p>רשת חיישנים רחבה כשכבת התרעה משלימה.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= DOWNLOAD ================= -->
+<section id="download" style="background:var(--bg2);">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="sec-eyebrow">האפליקציה</div>
+      <h2 class="sec-title">הפכו את הטלפון שלכם לחיישן.</h2>
+      <p class="sec-sub">התקינו את אפליקציית CyberDuck, הצטרפו לסשן הקלטה מסונכרן, והפכו לחלק מהרשת. עיבוד מקומי במכשיר — האודיו לא נשמר ולא נשלח לשום מקום.</p>
+    </div>
+    <div style="display:grid;grid-template-columns:1.1fr .9fr;gap:34px;align-items:center;margin-top:36px;" class="dlgrid reveal">
+      <div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div style="display:flex;gap:13px;align-items:flex-start;">
+            <span class="mono" style="color:var(--amber);">01</span>
+            <span style="color:#C3D2E4;font-size:15px;">הורידו את קובץ ה-APK ופתחו אותו בטלפון אנדרואיד.</span></div>
+          <div style="display:flex;gap:13px;align-items:flex-start;">
+            <span class="mono" style="color:var(--amber);">02</span>
+            <span style="color:#C3D2E4;font-size:15px;">אשרו התקנה ממקור לא ידוע (הגדרה חד-פעמית).</span></div>
+          <div style="display:flex;gap:13px;align-items:flex-start;">
+            <span class="mono" style="color:var(--amber);">03</span>
+            <span style="color:#C3D2E4;font-size:15px;">פתחו את האפליקציה, תנו הרשאת מיקרופון — והצטרפו לסשן.</span></div>
+        </div>
+        <div style="display:flex;gap:14px;margin-top:28px;flex-wrap:wrap;">
+          <a href="https://ddd-sensor-production.up.railway.app/ddd.apk" class="btn">⬇ הורדת האפליקציה (APK)</a>
+          <a href="https://ddd-sensor-production.up.railway.app/download.html" class="btn ghost">דף הורדה מלא</a>
+        </div>
+        <span class="note">אנדרואיד 7+ · ~45MB · עיבוד מקומי במכשיר</span>
+      </div>
+      <!-- phone mockup -->
+      <div style="justify-self:center;">
+        <svg viewBox="0 0 220 380" style="width:200px;filter:drop-shadow(0 18px 40px rgba(0,0,0,.45));">
+          <rect x="10" y="6" width="200" height="368" rx="30" fill="#0E2034" stroke="#1C3450" stroke-width="2"/>
+          <rect x="20" y="40" width="180" height="300" rx="10" fill="#0A1727"/>
+          <rect x="84" y="18" width="52" height="9" rx="5" fill="#1C3450"/>
+          <!-- mini acoustic field on screen -->
+          <circle cx="110" cy="150" r="70" fill="none" stroke="#16314e"/>
+          <circle cx="110" cy="150" r="44" fill="none" stroke="#13293f"/>
+          <circle class="pulse d1" cx="72" cy="195" r="6" fill="none" stroke="#36D399" stroke-width="1.3"/>
+          <circle class="pulse d3" cx="148" cy="195" r="6" fill="none" stroke="#36D399" stroke-width="1.3"/>
+          <circle cx="72" cy="195" r="7" fill="#0E2034" stroke="#36D399" stroke-width="2"/>
+          <circle cx="148" cy="195" r="7" fill="#0E2034" stroke="#36D399" stroke-width="2"/>
+          <circle cx="110" cy="95" r="7" fill="#0E2034" stroke="#36D399" stroke-width="2"/>
+          <circle cx="110" cy="150" r="6" fill="#F2922A"/>
+          <text x="110" y="300" text-anchor="middle" class="mono" font-size="11" fill="#8197B0">CyberDuck</text>
+          <text x="110" y="318" text-anchor="middle" class="mono" font-size="9" fill="#36D399">● סשן פעיל</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= CTA ================= -->
+<section id="contact">
+  <div class="wrap">
+    <div class="ctaband reveal">
+      <h2>רוצים להריץ פיילוט, או לשתף פעולה מחקרית?</h2>
+      <p>אנחנו מחפשים שותפים אקדמיים וקהילות לפריסת ניסוי. אם הנושא מדבר אליכם — בואו נדבר.</p>
+      <a href="mailto:hello@ddd.example" class="btn">צרו קשר</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div class="brand"><span class="dot"></span>CyberDuck&nbsp;<small>Drone Detection</small></div>
+    <div>זיהוי רחפנים אקוסטי מבוזר · אב־טיפוס · 2026</div>
+  </div>
+</footer>
+
+<script>
+  // scroll reveal
+  const io=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}})},{threshold:.14});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+</script>
+</body>
+</html>

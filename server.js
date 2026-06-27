@@ -106,7 +106,7 @@ app.get('/files', (req, res) => {
   }).join('');
   res.send(`<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DDD · קבצים שהועלו</title>
+<title>CyberDuck · קבצים שהועלו</title>
 <style>body{font-family:'Segoe UI',system-ui,sans-serif;background:#0B1A2F;color:#E6EEF7;max-width:700px;margin:0 auto;padding:24px}
 h1{color:#F08A24;font-size:20px}ul{list-style:none;padding:0}li{margin:10px 0;font-size:15px;padding:10px 12px;background:#11233D;border:1px solid #1E3A5C;border-radius:10px;display:flex;justify-content:space-between;align-items:center}
 a{color:#34D399;text-decoration:none}span{color:#7E96B2;font-size:12px}.empty{color:#7E96B2}.r{margin-top:14px}.r a{color:#F08A24}</style></head>
