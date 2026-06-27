@@ -95,7 +95,8 @@ app.get('/sensors', (req, res) => {
 
 // ---- synchronized recording session ----
 let session = null; // { id, startAt, dur }
-app.get('/cmd', (req, res) => res.json({ now: Date.now(), session }));
+let liveBroadcast = null; // { action:'start'|'stop', id }
+app.get('/cmd', (req, res) => res.json({ now: Date.now(), session, live: liveBroadcast }));
 app.post('/cmd/start', (req, res) => {
   const dur = Math.min(300, Math.max(5, parseInt((req.body && req.body.dur) || 60, 10)));
   const nm = (req.body && req.body.name)
@@ -168,8 +169,8 @@ function liveProcess() {
   } catch (e) { console.log('[live] err', e.message); }
 }
 
-app.post('/live/start', (req, res) => { live = {}; liveOn = true; liveCalib = null; liveProcessed = new Set(); res.json({ ok: true }); });
-app.post('/live/stop',  (req, res) => { liveOn = false; res.json({ ok: true }); });
+app.post('/live/start', (req, res) => { live = {}; liveOn = true; liveCalib = null; liveProcessed = new Set(); liveBroadcast = { action: 'start', id: Date.now() }; res.json({ ok: true }); });
+app.post('/live/stop',  (req, res) => { liveOn = false; liveBroadcast = { action: 'stop', id: Date.now() }; res.json({ ok: true }); });
 app.get('/live/status', (req, res) => res.json({ on: liveOn }));
 app.post('/live/chunk', express.raw({ type: '*/*', limit: '12mb' }), (req, res) => {
   const label = (req.query.label || 'phone').toString().replace(/[^A-Za-z0-9_-]/g, '_');
