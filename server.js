@@ -47,6 +47,29 @@ app.get('/stats', (req, res) => {
   });
 });
 
+// ---- precise TDOA fixes (computed from synchronized recordings) ----
+let fixes = []; // { lat, lon, x, y, label, err, t }
+app.post('/fix', (req, res) => {
+  const b = req.body || {};
+  if (typeof b.lat !== 'number' || typeof b.lon !== 'number')
+    return res.status(400).json({ ok: false, error: 'lat/lon required (numbers)' });
+  fixes.push({
+    lat: b.lat, lon: b.lon,
+    x: (typeof b.x === 'number') ? b.x : null,
+    y: (typeof b.y === 'number') ? b.y : null,
+    label: (b.label || '').toString().slice(0, 40),
+    err: (typeof b.err === 'number') ? b.err : null,
+    t: Date.now()
+  });
+  if (fixes.length > 200) fixes = fixes.slice(-200);
+  res.json({ ok: true, count: fixes.length });
+});
+app.get('/fixes', (req, res) => {
+  const now = Date.now(), keep = 10 * 60 * 1000; // last 10 minutes
+  res.json(fixes.filter(f => now - f.t < keep));
+});
+app.post('/fixes/clear', (req, res) => { fixes = []; res.json({ ok: true }); });
+
 // ---- sensor heartbeat / online roster ----
 let sensors = {}; // deviceId -> { lastSeen, label, lat, lon }
 app.post('/heartbeat', (req, res) => {

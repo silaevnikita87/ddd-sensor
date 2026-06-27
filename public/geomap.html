@@ -83,11 +83,12 @@ setTimeout(()=>map.invalidateSize(), 1200);
 function slotFor(dev,i){ return SLOTS[i % SLOTS.length]; }
 
 async function tick(){
-  let reports=[],sensors=[],stats={today:0,total:0};
+  let reports=[],sensors=[],stats={today:0,total:0},fixes=[];
   try{
     reports=await (await fetch('/reports')).json();
     sensors=await (await fetch('/sensors')).json();
     stats=await (await fetch('/stats')).json();
+    try{ fixes=await (await fetch('/fixes')).json(); }catch(_){}
     document.getElementById('clock').textContent='חי · '+new Date().toLocaleTimeString('he-IL');
   }catch(e){ document.getElementById('clock').textContent='שגיאת חיבור'; return; }
 
@@ -119,9 +120,27 @@ async function tick(){
   });
   // keep map sized correctly (critical inside the app WebView)
   map.invalidateSize();
-  // auto-frame: focus on the DETECTION area when active; otherwise show all sensors
-  const framePts = hot.length ? hot : (realPts.length ? realPts : allPts);
-  const tight = hot.length > 0;
+
+  // ---- precise TDOA fixes (from synchronized recordings + clap calibration) ----
+  const fixPts=[];
+  fixes.forEach(f=>{
+    if(typeof f.lat!=='number'||typeof f.lon!=='number') return;
+    fixPts.push([f.lat,f.lon]);
+    if(typeof f.err==='number' && f.err>0){
+      markers.push(L.circle([f.lat,f.lon],{radius:Math.max(1,f.err),color:'#F2922A',weight:1,
+        fillColor:'#F2922A',fillOpacity:.12,dashArray:'4'}).addTo(map));
+    }
+    markers.push(L.circleMarker([f.lat,f.lon],{radius:15,color:'#F2922A',weight:1.5,fill:false}).addTo(map));
+    const fm=L.circleMarker([f.lat,f.lon],{radius:7,color:'#0B1A2F',weight:2,
+      fillColor:'#F2922A',fillOpacity:1}).addTo(map);
+    fm.bindPopup(`<b>🎯 מיקום TDOA מדויק</b><br>${f.label||''}`+
+      (typeof f.err==='number'?`<br>שגיאה ±${f.err.toFixed(1)} מ׳`:''));
+    markers.push(fm);
+  });
+
+  // auto-frame: precise fix > detection area > all sensors
+  const framePts = fixPts.length ? fixPts : (hot.length ? hot : (realPts.length ? realPts : allPts));
+  const tight = fixPts.length>0 || hot.length>0;
   if(framePts.length){
     const key = (tight?'H:':'A:') + framePts.map(p=>p[0].toFixed(3)+','+p[1].toFixed(3)).sort().join('|');
     if(key !== window._fitKey){
@@ -138,10 +157,18 @@ async function tick(){
   if(coincDevs.size>=2){
     b.classList.add('b-red');
     document.getElementById('b-title').textContent='⚠ התראה — מספר חיישנים';
-    document.getElementById('b-sub').textContent=coincDevs.size+' חיישנים מזהים בו-זמנית — הערכת מיקום על המפה';
-    const lat=hot.reduce((a,p)=>a+p[0],0)/hot.length, lon=hot.reduce((a,p)=>a+p[1],0)/hot.length;
-    threat=L.circle([lat,lon],{radius:60,color:'#EF4444',weight:2,fillColor:'#EF4444',fillOpacity:.18,dashArray:'6'}).addTo(map);
-    threat.bindPopup('הערכת אזור מקור האיום');
+    if(fixPts.length){
+      document.getElementById('b-sub').textContent='🎯 מיקום TDOA מדויק מסומן על המפה';
+    }else{
+      document.getElementById('b-sub').textContent=coincDevs.size+' חיישנים מזהים בו-זמנית — הערכת מיקום על המפה';
+      const lat=hot.reduce((a,p)=>a+p[0],0)/hot.length, lon=hot.reduce((a,p)=>a+p[1],0)/hot.length;
+      threat=L.circle([lat,lon],{radius:60,color:'#EF4444',weight:2,fillColor:'#EF4444',fillOpacity:.18,dashArray:'6'}).addTo(map);
+      threat.bindPopup('הערכת אזור מקור האיום (קירוב)');
+    }
+  }else if(fixPts.length){
+    b.classList.add('b-red');
+    document.getElementById('b-title').textContent='🎯 מיקום מדויק';
+    document.getElementById('b-sub').textContent='מיקום TDOA משולש מסומן על המפה';
   }else if(recentDevs.size>=1){
     b.classList.add('b-amber');
     document.getElementById('b-title').textContent='זיהוי בודד';
