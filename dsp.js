@@ -67,6 +67,22 @@ function fft(re, im, inv) {
 
 function nextPow2(x) { let n = 1; while (n < x) n <<= 1; return n; }
 
+// FFT-domain band-pass: keeps energy in [f0,f1] Hz. Isolates the source
+// (broadband white noise) from low-frequency operator/wind noise.
+// VALIDATED band for field tests: 300-4000 Hz.
+function bandpass(x, fs, f0, f1) {
+  const N = nextPow2(x.length);
+  const re = new Float64Array(N), im = new Float64Array(N);
+  for (let i = 0; i < x.length; i++) re[i] = x[i];
+  fft(re, im, false);
+  for (let k = 0; k < N; k++) {
+    const f = Math.abs((k <= N / 2 ? k : k - N) * fs / N);
+    if (f < f0 || f > f1) { re[k] = 0; im[k] = 0; }
+  }
+  fft(re, im, true);
+  return re.subarray(0, x.length);
+}
+
 // cross-correlation lag (seconds) of a vs ref: positive => a delayed vs ref.
 // matches scipy.signal.correlate(a, ref) argmax convention.
 function xcorrLag(a, ref, fs) {
@@ -156,11 +172,13 @@ function clockOffsets(labels, mics, clapPos, calib, fs) {
 function localizeSource(labels, mics, src, fs, clockB, t0, t1) {
   const a = Math.floor(t0 * fs), b = Math.floor(t1 * fs);
   const ref = labels[0];
-  const refSeg = src[ref].slice(a, b);
+  let refSeg = src[ref].slice(a, b);
+  refSeg = bandpass(refSeg, fs, 300, 4000);          // isolate the source band
   const rm = mean(refSeg, 0, refSeg.length);
   for (let i = 0; i < refSeg.length; i++) refSeg[i] -= rm;
   const raw = labels.map(l => {
-    const seg = src[l].slice(a, b);
+    let seg = src[l].slice(a, b);
+    seg = bandpass(seg, fs, 300, 4000);
     const m = mean(seg, 0, seg.length);
     for (let i = 0; i < seg.length; i++) seg[i] -= m;
     return xcorrLag(seg, refSeg, fs);
@@ -170,4 +188,4 @@ function localizeSource(labels, mics, src, fs, clockB, t0, t1) {
   return localize(P, tdoa);
 }
 
-module.exports = { C, parseWav, fft, xcorrLag, clapTime, localize, toLatLon, clockOffsets, localizeSource };
+module.exports = { C, parseWav, fft, bandpass, xcorrLag, clapTime, localize, toLatLon, clockOffsets, localizeSource };
