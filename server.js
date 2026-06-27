@@ -105,6 +105,37 @@ app.post('/cmd/start', (req, res) => {
 });
 app.post('/cmd/stop', (req, res) => { session = null; res.json({ ok: true }); });
 
+// ---- LIVE mode: in-memory rolling chunk buffer (NOT persisted) ----
+// phones POST short audio chunks; the desktop processor pulls them, localizes, POSTs /fix.
+let live = {};          // label -> [ { seq, t, buf } ]  (last few chunks)
+let liveOn = false;     // a live session is active
+const LIVE_KEEP = 6;    // chunks kept per label
+app.post('/live/start', (req, res) => { live = {}; liveOn = true; res.json({ ok: true }); });
+app.post('/live/stop',  (req, res) => { liveOn = false; res.json({ ok: true }); });
+app.get('/live/status', (req, res) => res.json({ on: liveOn }));
+app.post('/live/chunk', express.raw({ type: '*/*', limit: '12mb' }), (req, res) => {
+  const label = (req.query.label || 'phone').toString().replace(/[^A-Za-z0-9_-]/g, '_');
+  const seq = parseInt(req.query.seq || '0', 10);
+  const t = parseInt(req.query.t || Date.now(), 10);
+  (live[label] = live[label] || []).push({ seq, t, buf: req.body });
+  if (live[label].length > LIVE_KEEP) live[label] = live[label].slice(-LIVE_KEEP);
+  res.json({ ok: true, seq });
+});
+app.get('/live/state', (req, res) => {
+  res.json(Object.entries(live).map(([label, arr]) => ({
+    label, lastSeq: arr.length ? arr[arr.length - 1].seq : -1,
+    seqs: arr.map(c => c.seq), lastT: arr.length ? arr[arr.length - 1].t : 0,
+    bytes: arr.length ? arr[arr.length - 1].buf.length : 0
+  })));
+});
+app.get('/live/chunk', (req, res) => {
+  const label = (req.query.label || '').toString().replace(/[^A-Za-z0-9_-]/g, '_');
+  const seq = parseInt(req.query.seq || '-1', 10);
+  const c = (live[label] || []).find(x => x.seq === seq);
+  if (!c) return res.status(404).json({ ok: false });
+  res.set('Content-Type', 'application/octet-stream').send(c.buf);
+});
+
 // ---- WAV upload collection ----
 const clean = s => (s || '').toString().replace(/[^A-Za-z0-9_-]/g, '_');
 app.post('/upload', express.raw({ type: '*/*', limit: '60mb' }), (req, res) => {
